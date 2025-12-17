@@ -1,6 +1,6 @@
 # Xiaomi MiMo Studio 去水印脚本
 
-**中文** | [English](README_en.md)
+🇨🇳 **中文** | 🇺🇸 [English](README_en.md)
 
 一个用于自动检测并移除 Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) 页面中水印的 Tampermonkey 用户脚本。
 
