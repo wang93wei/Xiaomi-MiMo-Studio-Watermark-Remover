@@ -120,3 +120,7 @@ Copyright (c) 2025 AlanWang
 - [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)
 - [Tampermonkey 官网](https://www.tampermonkey.net/)
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover&type=Date)](https://star-history.com/#wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover&Date)
+
