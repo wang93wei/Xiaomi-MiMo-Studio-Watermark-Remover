@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
 // @version      1.2.0
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
