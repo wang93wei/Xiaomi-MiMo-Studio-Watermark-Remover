@@ -3,7 +3,8 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.2.0
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
-// @author       You
+// @author       AlanWang
+// @license      MIT
 // @match        https://aistudio.xiaomimimo.com/*
 // @match        https://aistudio.xiaomimimo.com/#/*
 // @grant        none
