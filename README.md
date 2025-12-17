@@ -24,11 +24,25 @@
 
 ### 2. 安装脚本
 
-1. 打开 Tampermonkey 管理面板
-2. 点击"创建新脚本"
-3. 将 `xiaomi-mimo-watermark-remover.user.js` 文件的内容复制到编辑器中
-4. 保存脚本（Ctrl+S 或 Cmd+S）
-5. 确保脚本已启用
+选择以下任一方式安装脚本：
+
+#### 方式一：从 Greasy Fork 安装（推荐）
+
+1. 访问 [Greasy Fork 脚本页面](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+2. 点击页面上的"安装此脚本"按钮
+3. 确认安装即可
+
+#### 方式二：从 OpenUserJS 安装
+
+1. 访问 [OpenUserJS 脚本页面](https://openuserjs.org/scripts/AlanWang/Xiaomi_MiMo_Studio_%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+2. 点击页面上的"Install"按钮
+3. 确认安装即可
+
+#### 方式三：从 GitHub 直接安装
+
+1. 访问 [GitHub Raw 地址](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/raw/refs/heads/main/xiaomi-mimo-watermark-remover.user.js)
+2. Tampermonkey 会自动识别并提示安装
+3. 点击"安装"按钮确认即可
 
 ### 3. 使用
 

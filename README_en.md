@@ -22,11 +22,25 @@ A Tampermonkey userscript that automatically detects and removes watermarks from
 
 ### 2. Install the Script
 
-1. Open the Tampermonkey dashboard
-2. Click "Create a new script"
-3. Copy the contents of the `xiaomi-mimo-watermark-remover.user.js` file into the editor
-4. Save the script (Ctrl+S or Cmd+S)
-5. Ensure the script is enabled
+Choose one of the following methods to install the script:
+
+#### Method 1: Install from Greasy Fork (Recommended)
+
+1. Visit the [Greasy Fork script page](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+2. Click the "Install this script" button on the page
+3. Confirm the installation
+
+#### Method 2: Install from OpenUserJS
+
+1. Visit the [OpenUserJS script page](https://openuserjs.org/scripts/AlanWang/Xiaomi_MiMo_Studio_%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+2. Click the "Install" button on the page
+3. Confirm the installation
+
+#### Method 3: Install directly from GitHub
+
+1. Visit the [GitHub Raw URL](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/raw/refs/heads/main/xiaomi-mimo-watermark-remover.user.js)
+2. Tampermonkey will automatically recognize and prompt for installation
+3. Click the "Install" button to confirm
 
 ### 3. Usage
 
