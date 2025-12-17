@@ -5,6 +5,8 @@
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
+// @homepageURL  https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
+// @supportURL   https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/issues
 // @match        https://aistudio.xiaomimimo.com/*
 // @match        https://aistudio.xiaomimimo.com/#/*
 // @grant        none
