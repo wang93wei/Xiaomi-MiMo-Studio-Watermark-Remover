@@ -86,6 +86,11 @@ const ENABLE_LOG = false;
 
 ## 版本历史
 
+### v1.3.1
+- 优化 Windows 下首屏水印闪现问题：新增对全屏 Canvas 水印覆盖层的提前隐藏与清理
+- 优化清理触发时机：在获取水印内容前先处理覆盖层，减少对页面重绘（如打开 F12）依赖
+- 性能优化：清理流程使用有上限的 requestAnimationFrame 链执行，MutationObserver 回调增加防抖，避免持续高 CPU 占用
+
 ### v1.3.0
 - 优化 DOM 监听逻辑，仅对发生变化的局部节点进行扫描，显著降低 CPU 占用
 - 移除定时全量扫描，依赖 MutationObserver 的增量检测，提高性能与流畅度
