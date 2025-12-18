@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.3.0
+// @version      1.3.1
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -41,6 +41,7 @@
 
     // 水印内容（将从 API 动态获取）
     let WATERMARK_TEXT = null;
+    let WATERMARK_TEXT_CANDIDATES = [];
     
     // API 端点
     const USER_API_URL = 'https://aistudio.xiaomimimo.com/open-apis/user/mi/get';
@@ -63,8 +64,133 @@
 
     // 检查文本内容是否包含水印
     function containsWatermark(text) {
-        if (!text || typeof text !== 'string' || !WATERMARK_TEXT) return false;
-        return text.includes(WATERMARK_TEXT);
+        if (!text || typeof text !== 'string') return false;
+        if (!WATERMARK_TEXT_CANDIDATES || WATERMARK_TEXT_CANDIDATES.length === 0) return false;
+        return WATERMARK_TEXT_CANDIDATES.some((candidate) => candidate && text.includes(candidate));
+    }
+
+    function rebuildWatermarkCandidates() {
+        const candidates = [];
+        if (WATERMARK_TEXT && typeof WATERMARK_TEXT === 'string') {
+            candidates.push(WATERMARK_TEXT);
+
+            try {
+                const decoded = atob(WATERMARK_TEXT);
+                if (decoded && typeof decoded === 'string') {
+                    candidates.push(decoded);
+
+                    try {
+                        const utf8 = decodeURIComponent(escape(decoded));
+                        if (utf8 && typeof utf8 === 'string') candidates.push(utf8);
+                    } catch (_) {
+                    }
+                }
+            } catch (_) {
+            }
+        }
+
+        WATERMARK_TEXT_CANDIDATES = Array.from(new Set(candidates.filter(Boolean)));
+        logger.log('水印匹配候选:', WATERMARK_TEXT_CANDIDATES);
+    }
+
+    function isLikelyWatermarkOverlay(element) {
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+        const tag = element.tagName;
+
+        let style;
+        try {
+            style = window.getComputedStyle(element);
+        } catch (_) {
+            return false;
+        }
+        if (!style) return false;
+
+        const pointerEventsNone = style.pointerEvents === 'none';
+        const positionLikely = style.position === 'fixed' || style.position === 'absolute';
+        const zIndex = Number(style.zIndex);
+        const zIndexLikely = Number.isFinite(zIndex) ? zIndex >= 100 : false;
+
+        const bgImage = style.backgroundImage;
+        const hasBgImage = bgImage && bgImage !== 'none';
+        const opacity = Number(style.opacity);
+        const opacityLikely = Number.isFinite(opacity) ? opacity < 1 : false;
+
+        const isCanvas = tag === 'CANVAS';
+        const isDivLike = tag === 'DIV' || tag === 'SECTION' || tag === 'MAIN' || tag === 'ASIDE';
+
+        let rect;
+        try {
+            rect = element.getBoundingClientRect();
+        } catch (_) {
+            return false;
+        }
+        const vw = window.innerWidth || 0;
+        const vh = window.innerHeight || 0;
+        const coversMostViewport = vw > 0 && vh > 0 && rect.width >= vw * 0.9 && rect.height >= vh * 0.9;
+
+        if (!coversMostViewport) return false;
+        if (!pointerEventsNone) return false;
+        if (!(hasBgImage || isCanvas)) return false;
+        if (!(zIndexLikely || opacityLikely || positionLikely)) return false;
+
+        if (!(isCanvas || isDivLike)) return false;
+
+        return true;
+    }
+
+    function hideOverlayElement(element) {
+        if (!element || processedElements.has(element)) return;
+        try {
+            if (element.style) {
+                element.style.backgroundImage = 'none';
+                element.style.background = 'none';
+                element.style.opacity = '0';
+                element.style.visibility = 'hidden';
+                element.style.display = 'none';
+            }
+            processedElements.add(element);
+        } catch (_) {
+        }
+    }
+
+    function detectAndHideOverlays(root = document.body) {
+        if (!root) return;
+
+        const maxDepth = 12;
+
+        function traverse(node, depth) {
+            if (!node || depth > maxDepth) return;
+            try {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    if (!processedElements.has(node) && isLikelyWatermarkOverlay(node)) {
+                        hideOverlayElement(node);
+                        return;
+                    }
+                }
+
+                if (node.childNodes && node.childNodes.length) {
+                    for (let child of node.childNodes) {
+                        if (child.nodeType === Node.ELEMENT_NODE) {
+                            traverse(child, depth + 1);
+                        }
+                    }
+                }
+
+                if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
+                    traverse(node.shadowRoot, depth + 1);
+                }
+                if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE && node.childNodes && node.childNodes.length) {
+                    for (let child of node.childNodes) {
+                        if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                            traverse(child, depth + 1);
+                        }
+                    }
+                }
+            } catch (_) {
+            }
+        }
+
+        traverse(root, 0);
     }
 
     // 检查元素是否包含水印文本
@@ -181,7 +307,7 @@
 
     // 检测并移除水印（仅遍历给定根节点的子树，避免每次全量扫描 DOM）
     function detectAndRemoveWatermarks(root = document.body) {
-        if (!root || !WATERMARK_TEXT) return;
+        if (!root) return;
 
         const maxDepth = 10;
 
@@ -194,8 +320,13 @@
                     // 如果该节点已经处理过则直接跳过
                     if (processedElements.has(node)) return;
 
+                    if (isLikelyWatermarkOverlay(node)) {
+                        hideOverlayElement(node);
+                        return;
+                    }
+
                     // 检查当前节点
-                    if (elementContainsWatermark(node) || imageContainsWatermark(node)) {
+                    if (WATERMARK_TEXT && (elementContainsWatermark(node) || imageContainsWatermark(node))) {
                         removeWatermark(node);
                         return;
                     }
@@ -205,11 +336,22 @@
                 if (node.childNodes && node.childNodes.length) {
                     for (let child of node.childNodes) {
                         if (child.nodeType === Node.TEXT_NODE) {
-                            if (containsWatermark(child.textContent)) {
+                            if (WATERMARK_TEXT && containsWatermark(child.textContent)) {
                                 // 移除包含水印的文本节点
                                 child.remove();
                             }
                         } else if (child.nodeType === Node.ELEMENT_NODE) {
+                            traverse(child, depth + 1);
+                        }
+                    }
+                }
+
+                if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
+                    traverse(node.shadowRoot, depth + 1);
+                }
+                if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE && node.childNodes && node.childNodes.length) {
+                    for (let child of node.childNodes) {
+                        if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
                             traverse(child, depth + 1);
                         }
                     }
@@ -239,27 +381,35 @@
 
     // 创建 MutationObserver 监听 DOM 变化（仅处理发生变化的局部节点，降低 CPU 占用）
     function setupObserver() {
+        const scheduleLocalScan = debounce((nodes) => {
+            try {
+                nodes.forEach((node) => {
+                    if (!node) return;
+                    if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                        detectAndHideOverlays(node);
+                        detectAndRemoveWatermarks(node);
+                    }
+                });
+            } catch (_) {
+            }
+        }, 50);
+
         const observer = new MutationObserver((mutations) => {
+            const nodesToScan = [];
             mutations.forEach((mutation) => {
-                // 只对新增节点的子树做局部扫描
                 if (mutation.type === 'childList' && mutation.addedNodes && mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            detectAndRemoveWatermarks(node);
-                        }
-                    });
+                    mutation.addedNodes.forEach((node) => nodesToScan.push(node));
                 }
 
-                // 对样式 / src / class 等关键属性变化的目标节点做局部扫描
                 if (mutation.type === 'attributes') {
                     const attrName = mutation.attributeName;
                     if (attrName === 'style' || attrName === 'src' || attrName === 'class' || attrName === 'background-image') {
-                        if (mutation.target && mutation.target.nodeType === Node.ELEMENT_NODE) {
-                            detectAndRemoveWatermarks(mutation.target);
-                        }
+                        if (mutation.target) nodesToScan.push(mutation.target);
                     }
                 }
             });
+
+            if (nodesToScan.length > 0) scheduleLocalScan(nodesToScan);
         });
 
         // 配置观察选项
@@ -287,7 +437,6 @@
 
     // Canvas 水印检测（拦截 Canvas 绘制操作）
     function interceptCanvas() {
-        // 拦截 CanvasRenderingContext2D 的绘制方法
         const originalFillText = CanvasRenderingContext2D.prototype.fillText;
         const originalStrokeText = CanvasRenderingContext2D.prototype.strokeText;
         const originalDrawImage = CanvasRenderingContext2D.prototype.drawImage;
@@ -316,6 +465,78 @@
             }
             return originalDrawImage.apply(this, args);
         };
+
+        try {
+            if (typeof OffscreenCanvasRenderingContext2D !== 'undefined') {
+                const offscreenOriginalFillText = OffscreenCanvasRenderingContext2D.prototype.fillText;
+                const offscreenOriginalStrokeText = OffscreenCanvasRenderingContext2D.prototype.strokeText;
+                const offscreenOriginalDrawImage = OffscreenCanvasRenderingContext2D.prototype.drawImage;
+
+                OffscreenCanvasRenderingContext2D.prototype.fillText = function(...args) {
+                    const text = args[0];
+                    if (text && containsWatermark(String(text))) return;
+                    return offscreenOriginalFillText.apply(this, args);
+                };
+
+                OffscreenCanvasRenderingContext2D.prototype.strokeText = function(...args) {
+                    const text = args[0];
+                    if (text && containsWatermark(String(text))) return;
+                    return offscreenOriginalStrokeText.apply(this, args);
+                };
+
+                OffscreenCanvasRenderingContext2D.prototype.drawImage = function(...args) {
+                    const image = args[0];
+                    if (image && image.src && containsWatermark(image.src)) return;
+                    return offscreenOriginalDrawImage.apply(this, args);
+                };
+            }
+        } catch (e) {
+            logger.warn('拦截 OffscreenCanvas 失败:', e);
+        }
+    }
+
+    function clearLikelyWatermarkCanvases() {
+        const canvases = document.querySelectorAll('canvas');
+        if (!canvases || canvases.length === 0) return;
+
+        canvases.forEach((canvas) => {
+            if (!canvas || processedElements.has(canvas)) return;
+
+            try {
+                const style = window.getComputedStyle(canvas);
+                const positionLikely = style.position === 'fixed' || style.position === 'absolute';
+                const pointerEventsNone = style.pointerEvents === 'none';
+
+                const rect = canvas.getBoundingClientRect();
+                const vw = window.innerWidth || 0;
+                const vh = window.innerHeight || 0;
+                const coversMostViewport = vw > 0 && vh > 0 && rect.width >= vw * 0.9 && rect.height >= vh * 0.9;
+
+                if (coversMostViewport && (positionLikely || pointerEventsNone)) {
+                    const ctx2d = canvas.getContext('2d');
+                    if (ctx2d) {
+                        ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                    hideOverlayElement(canvas);
+                }
+            } catch (_) {
+            }
+        });
+    }
+
+    function forceRepaint() {
+        try {
+            const el = document.documentElement;
+            if (!el) return;
+
+            const prevTransform = el.style.transform;
+            el.style.transform = prevTransform ? prevTransform + ' translateZ(0)' : 'translateZ(0)';
+            void el.offsetHeight;
+            el.style.transform = prevTransform;
+
+            window.dispatchEvent(new Event('resize'));
+        } catch (_) {
+        }
     }
 
     // 拦截 CSS 样式（检查伪元素）
@@ -373,6 +594,7 @@
             
             if (result.code === 0 && result.data && result.data.watermark) {
                 WATERMARK_TEXT = result.data.watermark;
+                rebuildWatermarkCandidates();
                 logger.log('成功获取水印内容:', WATERMARK_TEXT);
                 return true;
             } else {
@@ -412,6 +634,7 @@
                     while (node = walker.nextNode()) {
                         if (node.textContent && node.textContent.includes(match)) {
                             WATERMARK_TEXT = match;
+                            rebuildWatermarkCandidates();
                             logger.log('从页面检测到水印:', WATERMARK_TEXT);
                             return true;
                         }
@@ -469,6 +692,21 @@
         
         // 设置观察器
         setupObserver();
+
+        const runCleanup = () => {
+            detectAndHideOverlays();
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+            forceRepaint();
+        };
+
+        const runCleanupFrames = (framesLeft) => {
+            runCleanup();
+            if (framesLeft <= 0) return;
+            requestAnimationFrame(() => runCleanupFrames(framesLeft - 1));
+        };
+
+        runCleanupFrames(20);
         
         return true;
     }
@@ -476,7 +714,10 @@
     // 主函数
     async function main() {
         logger.log('脚本开始运行...');
-        
+
+        detectAndHideOverlays(document.documentElement);
+        clearLikelyWatermarkCanvases();
+
         // 首先尝试获取水印内容（带重试）
         const watermarkFetched = await fetchWatermarkWithRetry(5, 1000);
         
