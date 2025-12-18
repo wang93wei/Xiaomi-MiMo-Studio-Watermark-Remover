@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.3.1
+// @version      1.3.2
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -567,6 +567,9 @@
     async function fetchWatermark() {
         try {
             logger.log('开始获取水印内容...');
+            const browserTimeZone = (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
+                ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai')
+                : 'Asia/Shanghai';
             const response = await fetch(USER_API_URL, {
                 method: 'GET',
                 headers: {
@@ -580,7 +583,7 @@
                     'sec-fetch-dest': 'empty',
                     'sec-fetch-mode': 'cors',
                     'sec-fetch-site': 'same-origin',
-                    'x-timezone': 'Asia/Shanghai'
+                    'x-timezone': browserTimeZone,
                 },
                 credentials: 'include' // 包含 cookies
             });

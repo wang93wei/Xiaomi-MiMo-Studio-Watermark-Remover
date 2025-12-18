@@ -86,6 +86,9 @@ const ENABLE_LOG = false;
 
 ## Version History
 
+### v1.3.2
+- Use the browser timezone for the `x-timezone` request header
+
 ### v1.3.1
 - Improved Windows initial watermark flash: early hide/cleanup of fullscreen Canvas watermark overlay
 - Improved cleanup timing: handle overlay before watermark text is fetched, reducing reliance on forced re-render (e.g., opening DevTools)
