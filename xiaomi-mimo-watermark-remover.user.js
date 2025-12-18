@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.2.0
+// @version      1.3.0
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -179,35 +179,30 @@
         }
     }
 
-    // 检测并移除水印
+    // 检测并移除水印（仅遍历给定根节点的子树，避免每次全量扫描 DOM）
     function detectAndRemoveWatermarks(root = document.body) {
         if (!root || !WATERMARK_TEXT) return;
-        
-        // 限制检测范围，避免遍历整个 DOM 树
+
         const maxDepth = 10;
-        let depth = 0;
-        
-        function traverse(node) {
-            if (depth > maxDepth || !node || processedElements.has(node)) return;
-            depth++;
-            
+
+        function traverse(node, depth) {
+            if (!node || depth > maxDepth) return;
+
             try {
-                // 检查当前节点
-                if (elementContainsWatermark(node) || imageContainsWatermark(node)) {
-                    removeWatermark(node);
-                    depth--;
-                    return;
-                }
-                
-                // 遍历子节点
-                if (node.children) {
-                    for (let child of node.children) {
-                        traverse(child);
+                // 只处理元素节点
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    // 如果该节点已经处理过则直接跳过
+                    if (processedElements.has(node)) return;
+
+                    // 检查当前节点
+                    if (elementContainsWatermark(node) || imageContainsWatermark(node)) {
+                        removeWatermark(node);
+                        return;
                     }
                 }
-                
-                // 检查文本节点
-                if (node.childNodes) {
+
+                // 遍历子节点
+                if (node.childNodes && node.childNodes.length) {
                     for (let child of node.childNodes) {
                         if (child.nodeType === Node.TEXT_NODE) {
                             if (containsWatermark(child.textContent)) {
@@ -215,22 +210,17 @@
                                 child.remove();
                             }
                         } else if (child.nodeType === Node.ELEMENT_NODE) {
-                            traverse(child);
+                            traverse(child, depth + 1);
                         }
                     }
                 }
             } catch (e) {
                 logger.warn('检测水印时出错:', e);
             }
-            
-            depth--;
         }
-        
-        traverse(root);
-    }
 
-    // 防抖版本的检测函数
-    const debouncedDetect = debounce(detectAndRemoveWatermarks, 100);
+        traverse(root, 0);
+    }
 
     // 初始化检测
     function init() {
@@ -247,29 +237,29 @@
         }
     }
 
-    // 创建 MutationObserver 监听 DOM 变化
+    // 创建 MutationObserver 监听 DOM 变化（仅处理发生变化的局部节点，降低 CPU 占用）
     function setupObserver() {
         const observer = new MutationObserver((mutations) => {
-            let shouldCheck = false;
-            
             mutations.forEach((mutation) => {
-                // 检查新增的节点
-                if (mutation.addedNodes && mutation.addedNodes.length > 0) {
-                    shouldCheck = true;
+                // 只对新增节点的子树做局部扫描
+                if (mutation.type === 'childList' && mutation.addedNodes && mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            detectAndRemoveWatermarks(node);
+                        }
+                    });
                 }
-                
-                // 检查属性变化（可能影响样式或内容）
+
+                // 对样式 / src / class 等关键属性变化的目标节点做局部扫描
                 if (mutation.type === 'attributes') {
                     const attrName = mutation.attributeName;
-                    if (attrName === 'style' || attrName === 'src' || attrName === 'class') {
-                        shouldCheck = true;
+                    if (attrName === 'style' || attrName === 'src' || attrName === 'class' || attrName === 'background-image') {
+                        if (mutation.target && mutation.target.nodeType === Node.ELEMENT_NODE) {
+                            detectAndRemoveWatermarks(mutation.target);
+                        }
                     }
                 }
             });
-            
-            if (shouldCheck) {
-                debouncedDetect();
-            }
         });
 
         // 配置观察选项
@@ -479,13 +469,6 @@
         
         // 设置观察器
         setupObserver();
-        
-        // 定期检测（作为备用方案）
-        setInterval(() => {
-            if (WATERMARK_TEXT) {
-                debouncedDetect();
-            }
-        }, 2000);
         
         return true;
     }

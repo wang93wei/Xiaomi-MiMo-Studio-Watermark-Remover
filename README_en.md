@@ -86,6 +86,10 @@ const ENABLE_LOG = false;
 
 ## Version History
 
+### v1.3.0
+- Optimized DOM observation logic to scan only the local subtree of changed nodes, significantly reducing CPU usage
+- Removed periodic full-page scans and rely on incremental detection via MutationObserver for better performance and responsiveness
+
 ### v1.2.0
 - Added global log switch, disabled by default
 - Unified log output format
