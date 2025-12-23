@@ -86,6 +86,11 @@ const ENABLE_LOG = false;
 
 ## Version History
 
+### v1.3.3
+- Performance: Removed redundant DOM scans, cleanup process now executes once
+- Code: Removed duplicate initialization calls, streamlined main flow
+- Error handling: Added debug logs for critical operations to aid troubleshooting
+
 ### v1.3.2
 - Use the browser timezone for the `x-timezone` request header
 

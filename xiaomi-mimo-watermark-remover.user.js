@@ -100,7 +100,8 @@
         let style;
         try {
             style = window.getComputedStyle(element);
-        } catch (_) {
+        } catch (e) {
+            logger.warn('获取元素样式失败:', e);
             return false;
         }
         if (!style) return false;
@@ -121,7 +122,8 @@
         let rect;
         try {
             rect = element.getBoundingClientRect();
-        } catch (_) {
+        } catch (e) {
+            logger.warn('获取元素尺寸失败:', e);
             return false;
         }
         const vw = window.innerWidth || 0;
@@ -149,7 +151,8 @@
                 element.style.display = 'none';
             }
             processedElements.add(element);
-        } catch (_) {
+        } catch (e) {
+            logger.warn('隐藏元素时出错:', e);
         }
     }
 
@@ -186,7 +189,8 @@
                         }
                     }
                 }
-            } catch (_) {
+            } catch (e) {
+                logger.warn('DOM遍历时出错:', e);
             }
         }
 
@@ -390,7 +394,8 @@
                         detectAndRemoveWatermarks(node);
                     }
                 });
-            } catch (_) {
+            } catch (e) {
+                logger.warn('局部扫描时出错:', e);
             }
         }, 50);
 
@@ -519,7 +524,8 @@
                     }
                     hideOverlayElement(canvas);
                 }
-            } catch (_) {
+            } catch (e) {
+                logger.warn('清理Canvas水印时出错:', e);
             }
         });
     }
@@ -535,7 +541,8 @@
             el.style.transform = prevTransform;
 
             window.dispatchEvent(new Event('resize'));
-        } catch (_) {
+        } catch (e) {
+            logger.warn('强制重绘时出错:', e);
         }
     }
 
@@ -690,26 +697,13 @@
         interceptCanvas();
         interceptStyles();
         
-        // 初始化检测
-        init();
-        
-        // 设置观察器
+        // 设置观察器（初始化检测和观察器只需执行一次）
         setupObserver();
 
-        const runCleanup = () => {
-            detectAndHideOverlays();
-            detectAndRemoveWatermarks();
-            clearLikelyWatermarkCanvases();
-            forceRepaint();
-        };
-
-        const runCleanupFrames = (framesLeft) => {
-            runCleanup();
-            if (framesLeft <= 0) return;
-            requestAnimationFrame(() => runCleanupFrames(framesLeft - 1));
-        };
-
-        runCleanupFrames(20);
+        // 执行一次完整的清理（减少重复扫描）
+        detectAndHideOverlays();
+        detectAndRemoveWatermarks();
+        clearLikelyWatermarkCanvases();
         
         return true;
     }
@@ -718,13 +712,10 @@
     async function main() {
         logger.log('脚本开始运行...');
 
-        detectAndHideOverlays(document.documentElement);
-        clearLikelyWatermarkCanvases();
-
         // 首先尝试获取水印内容（带重试）
         const watermarkFetched = await fetchWatermarkWithRetry(5, 1000);
         
-        // 如果成功获取水印，启动移除功能
+        // 如果成功获取水印，启动移除功能（startWatermarkRemoval 会执行初始检测）
         if (watermarkFetched && WATERMARK_TEXT) {
             startWatermarkRemoval();
         } else {
