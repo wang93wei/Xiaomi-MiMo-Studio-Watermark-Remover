@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.3.2
+// @version      1.3.3
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -65,7 +65,7 @@
     // 检查文本内容是否包含水印
     function containsWatermark(text) {
         if (!text || typeof text !== 'string') return false;
-        if (!WATERMARK_TEXT_CANDIDATES || WATERMARK_TEXT_CANDIDATES.length === 0) return false;
+        if (!Array.isArray(WATERMARK_TEXT_CANDIDATES) || WATERMARK_TEXT_CANDIDATES.length === 0) return false;
         return WATERMARK_TEXT_CANDIDATES.some((candidate) => candidate && text.includes(candidate));
     }
 
@@ -340,8 +340,8 @@
                 if (node.childNodes && node.childNodes.length) {
                     for (let child of node.childNodes) {
                         if (child.nodeType === Node.TEXT_NODE) {
-                            if (WATERMARK_TEXT && containsWatermark(child.textContent)) {
-                                // 移除包含水印的文本节点
+                            const textContent = child.textContent || '';
+                            if (WATERMARK_TEXT && containsWatermark(textContent)) {
                                 child.remove();
                             }
                         } else if (child.nodeType === Node.ELEMENT_NODE) {
@@ -562,8 +562,15 @@
         Node.prototype.appendChild = function(child) {
             if (child && child.tagName === 'STYLE' && WATERMARK_TEXT) {
                 if (child.textContent && containsWatermark(child.textContent)) {
-                    // 移除水印内容
-                    child.textContent = child.textContent.replace(new RegExp(WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '');
+                    try {
+                        const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        if (escapedWatermark.length < 1000) {
+                            const watermarkRegex = new RegExp(escapedWatermark, 'g');
+                            child.textContent = child.textContent.replace(watermarkRegex, '');
+                        }
+                    } catch (e) {
+                        logger.warn('处理样式内容时出错:', e);
+                    }
                 }
             }
             return originalAppendChild.call(this, child);
@@ -577,29 +584,46 @@
             const browserTimeZone = (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
                 ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai')
                 : 'Asia/Shanghai';
-            const response = await fetch(USER_API_URL, {
-                method: 'GET',
-                headers: {
-                    'accept': '*/*',
-                    'accept-language': 'system',
-                    'cache-control': 'no-cache',
-                    'content-type': 'application/json',
-                    'dnt': '1',
-                    'pragma': 'no-cache',
-                    'referer': 'https://aistudio.xiaomimimo.com/',
-                    'sec-fetch-dest': 'empty',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-site': 'same-origin',
-                    'x-timezone': browserTimeZone,
-                },
-                credentials: 'include' // 包含 cookies
-            });
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            let response;
+            try {
+                response = await fetch(USER_API_URL, {
+                    method: 'GET',
+                    headers: {
+                        'accept': '*/*',
+                        'accept-language': 'system',
+                        'cache-control': 'no-cache',
+                        'content-type': 'application/json',
+                        'dnt': '1',
+                        'pragma': 'no-cache',
+                        'referer': 'https://aistudio.xiaomimimo.com/',
+                        'sec-fetch-dest': 'empty',
+                        'sec-fetch-mode': 'cors',
+                        'sec-fetch-site': 'same-origin',
+                        'x-timezone': browserTimeZone,
+                    },
+                    credentials: 'include',
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const result = await response.json();
+            let result;
+            try {
+                result = await response.json();
+            } catch (jsonError) {
+                const responseText = await response.text().catch(() => '无法获取响应内容');
+                logger.error('解析 API 响应失败:', jsonError, '响应内容:', responseText);
+                return false;
+            }
             logger.log('API 响应:', result);
             
             if (result.code === 0 && result.data && result.data.watermark) {
@@ -612,48 +636,56 @@
                 return false;
             }
         } catch (error) {
-            logger.error('获取水印内容失败:', error);
+            if (error.name === 'AbortError') {
+                logger.error('获取水印请求超时');
+            } else {
+                logger.error('获取水印内容失败:', error);
+            }
             return false;
         }
     }
 
     // 从页面中检测水印（备选方案）
     function detectWatermarkFromPage() {
-        if (WATERMARK_TEXT) return true; // 如果已经有水印，不需要检测
-        
-        logger.log('尝试从页面中检测水印...');
-        
-        // 检查常见的 base64 编码字符串模式（水印通常是 base64）
-        const base64Pattern = /[A-Za-z0-9+/]{20,}={0,2}/g;
-        const allText = document.body ? document.body.innerText : '';
-        const matches = allText.match(base64Pattern);
-        
-        if (matches && matches.length > 0) {
-            // 查找最可能的水印（通常是较短的 base64 字符串）
-            for (let match of matches) {
-                // 检查是否是合理的水印长度（通常在 20-30 个字符左右）
-                if (match.length >= 20 && match.length <= 50) {
-                    // 检查是否在页面的可见位置
-                    const walker = document.createTreeWalker(
-                        document.body,
-                        NodeFilter.SHOW_TEXT,
-                        null
-                    );
-                    
-                    let node;
-                    while (node = walker.nextNode()) {
-                        if (node.textContent && node.textContent.includes(match)) {
-                            WATERMARK_TEXT = match;
-                            rebuildWatermarkCandidates();
-                            logger.log('从页面检测到水印:', WATERMARK_TEXT);
-                            return true;
+        try {
+            if (WATERMARK_TEXT) return true;
+            
+            logger.log('尝试从页面中检测水印...');
+            
+            if (!document.body) return false;
+            
+            const base64Pattern = /[A-Za-z0-9+/]{20,}={0,2}/g;
+            const allText = document.body.innerText || '';
+            const matches = allText.match(base64Pattern);
+            
+            if (matches && matches.length > 0) {
+                for (let match of matches) {
+                    if (match.length >= 20 && match.length <= 50) {
+                        const walker = document.createTreeWalker(
+                            document.body,
+                            NodeFilter.SHOW_TEXT,
+                            null
+                        );
+                        
+                        let node;
+                        while ((node = walker.nextNode())) {
+                            const textContent = node.textContent || '';
+                            if (textContent.includes(match)) {
+                                WATERMARK_TEXT = match;
+                                rebuildWatermarkCandidates();
+                                logger.log('从页面检测到水印:', WATERMARK_TEXT);
+                                return true;
+                            }
                         }
                     }
                 }
             }
+            
+            return false;
+        } catch (error) {
+            logger.error('从页面检测水印时出错:', error);
+            return false;
         }
-        
-        return false;
     }
 
     // 带重试的获取水印函数
@@ -693,17 +725,17 @@
         
         logger.log('启动水印移除功能，水印内容:', WATERMARK_TEXT);
         
-        // 拦截 Canvas 和样式
-        interceptCanvas();
-        interceptStyles();
-        
-        // 设置观察器（初始化检测和观察器只需执行一次）
-        setupObserver();
-
-        // 执行一次完整的清理（减少重复扫描）
-        detectAndHideOverlays();
-        detectAndRemoveWatermarks();
-        clearLikelyWatermarkCanvases();
+        try {
+            interceptCanvas();
+            interceptStyles();
+            setupObserver();
+            detectAndHideOverlays();
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+        } catch (error) {
+            logger.error('启动水印移除功能时出错:', error);
+            return false;
+        }
         
         return true;
     }

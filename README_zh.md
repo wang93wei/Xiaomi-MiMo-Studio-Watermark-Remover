@@ -2,19 +2,42 @@
 
 🇨🇳 **中文** | 🇺🇸 [English](README_en.md)
 
+---
+
 一个用于自动检测并移除 Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) 页面中水印的 Tampermonkey 用户脚本。
 
-## 功能特性
+## 📋 目录
+
+- [功能特性](#功能特性)
+- [安装方法](#安装方法)
+- [配置选项](#配置选项)
+- [工作原理](#工作原理)
+- [技术实现](#技术实现)
+- [常见问题](#常见问题)
+- [故障排除](#故障排除)
+- [兼容性](#兼容性)
+- [版本历史](#版本历史)
+- [注意事项](#注意事项)
+- [许可证](#许可证)
+- [贡献](#贡献)
+- [相关链接](#相关链接)
+
+## ✨ 功能特性
 
 - ✅ **动态获取水印**：自动从 API 获取当前用户的水印内容，无需手动配置
 - ✅ **多种检测方式**：支持文本、图片、Canvas、CSS 等多种水印形式的检测和移除
 - ✅ **实时监听**：使用 MutationObserver 监听 DOM 变化，自动检测并移除动态添加的水印
 - ✅ **性能优化**：防抖机制、元素缓存、检测深度限制等优化措施
 - ✅ **日志控制**：可配置的日志开关，默认关闭，需要调试时可开启
+- ✅ **异常处理**：完善的错误处理和日志记录，便于问题排查
+- ✅ **零依赖**：纯原生 JavaScript 实现，无外部依赖
+- ✅ **内存优化**：使用 WeakSet 避免内存泄漏
 
-## 安装方法
+## 🚀 安装方法
 
 ### 1. 安装 Tampermonkey
+
+首先需要安装 Tampermonkey 浏览器扩展：
 
 - **Chrome/Edge**: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
 - **Firefox**: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/tampermonkey/)
@@ -42,102 +65,340 @@
 2. Tampermonkey 会自动识别并提示安装
 3. 点击"安装"按钮确认即可
 
-### 3. 使用
+### 3. 验证安装
 
-访问 [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)，脚本会自动运行并移除页面中的水印。
+安装完成后，访问 [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)，你应该能看到：
 
-## 配置选项
+- 页面上的水印文字已经消失
+- 浏览器控制台（如果开启了日志）会显示 `[去水印脚本]` 相关的日志信息
+
+## ⚙️ 配置选项
 
 脚本支持以下配置选项（在脚本开头修改）：
 
 ```javascript
+// ========== 配置选项 ==========
 // 日志开关（设置为 true 启用日志，false 关闭日志）
 const ENABLE_LOG = false;
 ```
 
-- **ENABLE_LOG**: 控制是否输出调试日志
-  - `false`（默认）：不输出日志，静默运行
-  - `true`：在浏览器控制台输出详细日志，便于调试
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `ENABLE_LOG` | Boolean | `false` | 控制是否输出调试日志，`true` 启用，`false` 关闭 |
 
-## 工作原理
+### 启用日志进行调试
 
-1. **获取水印内容**：脚本启动时自动调用 API `https://aistudio.xiaomimimo.com/open-apis/user/mi/get` 获取当前用户的水印内容
-2. **检测水印**：通过多种方式检测页面中的水印：
-   - 文本内容检测（textContent、innerText、innerHTML）
-   - 图片检测（img src、CSS background-image）
-   - Canvas 绘制拦截
-   - CSS 样式拦截
-3. **移除水印**：根据检测到的水印类型，执行相应的移除操作
-4. **动态监听**：使用 MutationObserver 监听 DOM 变化，确保动态添加的水印也能被移除
+当需要排查问题时，可以将 `ENABLE_LOG` 设置为 `true`：
 
-## 技术实现
+```javascript
+const ENABLE_LOG = true;
+```
 
-- **API 请求**：使用 `fetch` API 获取用户信息和水印内容
-- **DOM 监听**：使用 `MutationObserver` 监听页面变化
-- **Canvas 拦截**：拦截 `CanvasRenderingContext2D` 的绘制方法
-- **性能优化**：防抖、WeakSet 缓存、检测深度限制
+启用后，浏览器控制台（F12）会输出详细的日志信息，包括：
 
-## 兼容性
+- 水印检测过程
+- DOM 变化监听
+- Canvas 拦截记录
+- 错误和警告信息
 
-- ✅ Chrome/Edge (Chromium)
-- ✅ Firefox
-- ✅ Safari
-- ✅ 其他支持 Tampermonkey 的浏览器
+## 🔬 工作原理
 
-## 版本历史
+### 1. 获取水印内容
 
-### v1.3.3
+脚本启动时自动调用 API 获取当前用户的水印内容：
+
+```
+GET https://aistudio.xiaomimimo.com/open-apis/user/mi/get
+```
+
+API 请求特点：
+- 自动携带用户认证信息（cookies）
+- 自动设置时区相关的请求头
+- 超时处理（10秒）
+- 错误重试机制
+
+### 2. 检测水印
+
+脚本通过多种方式检测页面中的水印：
+
+#### 文本检测
+- 检查元素的 `textContent`、`innerText`、`innerHTML`
+- 检查表单元素的 `value` 属性
+- 检查所有 HTML 属性的值
+
+#### 图片检测
+- 检查 `<img>` 标签的 `src` 属性
+- 检查 CSS 的 `background-image` 属性
+- 检查内联样式中的背景图片
+
+#### Canvas 拦截
+- 拦截 `CanvasRenderingContext2D.fillText()`
+- 拦截 `CanvasRenderingContext2D.strokeText()`
+- 拦截 `CanvasRenderingContext2D.drawImage()`
+- 阻止包含水印内容的绘制操作
+
+#### CSS 样式检测
+- 检测全屏覆盖层元素
+- 检测固定定位的元素
+- 检测 `pointer-events: none` 的元素
+- 检测高 z-index 的透明元素
+
+### 3. 移除水印
+
+根据检测到的水印类型，执行相应的移除操作：
+
+- **文本水印**：从 DOM 节点中移除或替换水印文本
+- **图片水印**：清除背景图片或隐藏/移除元素
+- **Canvas 水印**：阻止绘制或清空画布
+- **覆盖层水印**：隐藏或移除覆盖层元素
+
+### 4. 动态监听
+
+使用 `MutationObserver` 监听 DOM 变化：
+
+- 监听子节点的添加和删除
+- 监听特定属性变化（style、src、class、background-image）
+- 仅扫描变化的局部节点，降低 CPU 占用
+- 使用防抖机制，避免频繁执行
+
+## 🛠️ 技术实现
+
+### 核心架构
+
+```
+├── 配置文件
+│   ├── ENABLE_LOG (日志开关)
+│   └── 水印内容变量
+├── 日志系统
+│   ├── logger.log()
+│   ├── logger.warn()
+│   └── logger.error()
+├── 水印检测
+│   ├── containsWatermark() - 文本匹配
+│   ├── elementContainsWatermark() - 元素检测
+│   ├── imageContainsWatermark() - 图片检测
+│   └── isLikelyWatermarkOverlay() - 覆盖层检测
+├── 水印移除
+│   ├── hideOverlayElement() - 隐藏覆盖层
+│   ├── removeWatermark() - 移除水印元素
+│   └── clearLikelyWatermarkCanvases() - 清空水印画布
+├── DOM 监听
+│   ├── detectAndHideOverlays() - 检测并隐藏覆盖层
+│   ├── detectAndRemoveWatermarks() - 检测并移除水印
+│   └── setupObserver() - 设置 MutationObserver
+└── Canvas 拦截
+    ├── interceptCanvas() - 拦截 Canvas API
+    └── OffscreenCanvas 支持
+```
+
+### 性能优化策略
+
+1. **防抖机制**：使用 `debounce()` 函数，避免频繁执行
+2. **WeakSet 缓存**：使用 WeakSet 存储已处理元素，避免内存泄漏
+3. **深度限制**：DOM 遍历最大深度限制为 10-12 层
+4. **局部扫描**：仅扫描变化的局部节点，而非全量扫描
+5. **元素缓存**：避免重复处理同一元素
+
+### 错误处理
+
+- 所有 DOM 操作都有 try-catch 保护
+- API 请求有超时处理（10秒）
+- JSON 解析错误会被捕获和记录
+- 详细的错误日志便于问题排查
+
+## ❓ 常见问题
+
+### Q1: 脚本无法安装？
+
+**解决方案**：
+- 确保已安装 Tampermonkey 扩展
+- 检查浏览器是否支持该脚本
+- 尝试刷新页面后重新安装
+- 检查是否有其他脚本冲突
+
+### Q2: 水印没有移除？
+
+**解决方案**：
+1. 打开浏览器控制台（F12）
+2. 将 `ENABLE_LOG` 设置为 `true`
+3. 刷新页面查看日志
+4. 确认脚本是否正确执行
+
+### Q3: 页面显示异常？
+
+**解决方案**：
+- 检查是否有其他浏览器扩展冲突
+- 尝试在隐身模式下使用
+- 清除浏览器缓存后重试
+
+### Q4: API 请求失败？
+
+**解决方案**：
+- 确保已登录 Xiaomi MiMo Studio
+- 检查网络连接
+- 查看控制台错误信息
+
+### Q5: 性能问题？
+
+**解决方案**：
+- 脚本已优化，CPU 占用很低
+- 如仍有问题，尝试：
+  - 关闭其他扩展
+  - 使用最新版本浏览器
+  - 清理浏览器缓存
+
+## 🔧 故障排除
+
+### 启用调试模式
+
+1. 编辑脚本，将 `ENABLE_LOG` 改为 `true`
+2. 打开浏览器控制台（F12 -> Console）
+3. 刷新页面，查看日志输出
+
+### 查看脚本是否运行
+
+在控制台中输入：
+```javascript
+console.log('脚本状态:', typeof WATERMARK_TEXT !== 'undefined' ? '已运行' : '未运行');
+```
+
+### 检查水印内容
+
+```javascript
+// 在控制台中执行
+console.log('当前水印内容:', WATERMARK_TEXT);
+console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
+```
+
+### 重置脚本状态
+
+1. 禁用脚本
+2. 刷新页面
+3. 重新启用脚本
+
+### 报告问题
+
+当遇到问题时，请提供以下信息：
+
+1. 浏览器版本和操作系统
+2. Tampermonkey 版本
+3. 脚本版本
+4. 错误日志（开启调试模式后）
+5. 问题描述和复现步骤
+
+## 📱 兼容性
+
+| 浏览器 | 版本 | 状态 |
+|--------|------|------|
+| Chrome | 90+ | ✅ 完全支持 |
+| Edge | 90+ | ✅ 完全支持 |
+| Firefox | 88+ | ✅ 完全支持 |
+| Safari | 14+ | ✅ 完全支持 |
+| Opera | 76+ | ✅ 完全支持 |
+
+### 系统要求
+
+- 支持 ES6+ 的现代浏览器
+- 启用 JavaScript
+- Tampermonkey 扩展
+
+## 📝 版本历史
+
+### v1.3.3 (2025-01)
 - 性能优化：移除重复的 DOM 扫描，清理流程改为单次执行
 - 代码优化：移除重复的初始化调用，精简主流程
 - 异常处理改进：为关键操作添加调试日志，便于问题排查
 
-### v1.3.2
+### v1.3.2 (2025-01)
 - `x-timezone` 请求头改为根据浏览器时区自动获取
 
-### v1.3.1
+### v1.3.1 (2025-01)
 - 优化 Windows 下首屏水印闪现问题：新增对全屏 Canvas 水印覆盖层的提前隐藏与清理
-- 优化清理触发时机：在获取水印内容前先处理覆盖层，减少对页面重绘（如打开 F12）依赖
-- 性能优化：清理流程使用有上限的 requestAnimationFrame 链执行，MutationObserver 回调增加防抖，避免持续高 CPU 占用
+- 优化清理触发时机：在获取水印内容前先处理覆盖层，减少对页面重绘依赖
+- 性能优化：清理流程使用有上限的 requestAnimationFrame 链执行
 
-### v1.3.0
-- 优化 DOM 监听逻辑，仅对发生变化的局部节点进行扫描，显著降低 CPU 占用
-- 移除定时全量扫描，依赖 MutationObserver 的增量检测，提高性能与流畅度
+### v1.3.0 (2025-01)
+- 优化 DOM 监听逻辑，仅对发生变化的局部节点进行扫描
+- 移除定时全量扫描，依赖 MutationObserver 的增量检测
 
-### v1.2.0
+### v1.2.0 (2025-01)
 - 添加全局日志开关，默认关闭
 - 统一日志输出格式
 
-### v1.1.0
+### v1.1.0 (2025-01)
 - 添加动态获取水印功能
 - 添加重试机制和页面检测备选方案
 - 改进错误处理和日志输出
 
-### v1.0.0
-- 初始版本
+### v1.0.0 (2025-01)
+- 初始版本发布
 - 支持多种水印形式的检测和移除
 
-## 注意事项
+## ⚠️ 注意事项
 
 - 本脚本仅用于学习和研究目的
 - 使用前请确保遵守相关网站的使用条款
 - 脚本会自动获取当前登录用户的水印内容，无需手动配置
+- 定期更新脚本以获取最新功能和修复
+- 如遇到问题，请先查看常见问题和故障排除部分
 
-## 许可证
+## 📄 许可证
 
+本项目采用 MIT 许可证开源。
+
+```
 MIT License
 
 Copyright (c) 2025 AlanWang
 
-## 贡献
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-欢迎提交 Issue 和 Pull Request！
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-## 相关链接
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## 🤝 贡献
+
+欢迎贡献代码！请遵循以下步骤：
+
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
+
+### 贡献指南
+
+- 遵循项目的代码风格
+- 确保代码通过 lint 检查
+- 添加适当的测试
+- 更新相关文档
+
+## 🔗 相关链接
 
 - [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)
 - [Tampermonkey 官网](https://www.tampermonkey.net/)
+- [Greasy Fork 脚本页面](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+- [GitHub 项目地址](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover)
+- [问题反馈](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/issues)
 
-## Star History
+## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover&type=Date)](https://star-history.com/#wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover&Date)
 
+---
+
+**感谢您的使用！** 如果这个脚本对您有帮助，请给个项目 Star 支持一下。
