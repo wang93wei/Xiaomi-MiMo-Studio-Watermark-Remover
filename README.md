@@ -304,33 +304,33 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
-### v1.3.3 (2025-01)
+### v1.3.3 (2025-12-24)
 - Performance: Removed redundant DOM scans, cleanup process now executes once
 - Code: Removed duplicate initialization calls, streamlined main flow
 - Error handling: Added debug logs for critical operations to aid troubleshooting
 
-### v1.3.2 (2025-01)
+### v1.3.2
 - Use the browser timezone for the `x-timezone` request header
 
-### v1.3.1 (2025-01)
+### v1.3.1
 - Improved Windows initial watermark flash: early hide/cleanup of fullscreen Canvas watermark overlay
 - Improved cleanup timing: handle overlay before watermark text is fetched, reducing reliance on forced re-render
 - Performance: bounded requestAnimationFrame cleanup loop and debounced MutationObserver callbacks to avoid sustained high CPU usage
 
-### v1.3.0 (2025-01)
+### v1.3.0
 - Optimized DOM observation logic to scan only the local subtree of changed nodes, significantly reducing CPU usage
 - Removed periodic full-page scans and rely on incremental detection via MutationObserver for better performance and responsiveness
 
-### v1.2.0 (2025-01)
+### v1.2.0
 - Added global log switch, disabled by default
 - Unified log output format
 
-### v1.1.0 (2025-01)
+### v1.1.0
 - Added dynamic watermark fetching functionality
 - Added retry mechanism and page detection fallback
 - Improved error handling and log output
 
-### v1.0.0 (2025-01)
+### v1.0.0
 - Initial release
 - Supports detection and removal of multiple watermark forms
 
