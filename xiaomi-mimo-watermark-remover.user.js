@@ -10,7 +10,7 @@
 // @match        https://aistudio.xiaomimimo.com/*
 // @match        https://aistudio.xiaomimimo.com/#/*
 // @grant        none
-// @run-at       document-start
+// @run-at       document-end
 // ==/UserScript==
 
 (function() {
@@ -19,7 +19,15 @@
     // ========== 配置选项 ==========
     // 日志开关（设置为 true 启用日志，false 关闭日志）
     const ENABLE_LOG = false;
-    
+
+    // 错误统计
+    const errorStats = {
+        fetchErrors: 0,
+        domErrors: 0,
+        canvasErrors: 0,
+        styleErrors: 0
+    };
+
     // ========== 日志函数 ==========
     const logger = {
         log: (...args) => {
@@ -33,9 +41,16 @@
             }
         },
         error: (...args) => {
-            if (ENABLE_LOG) {
-                console.error('[去水印脚本]', ...args);
+            // 错误信息始终输出，即使日志关闭
+            console.error('[去水印脚本]', ...args);
+        },
+        stat: (type) => {
+            if (errorStats.hasOwnProperty(type)) {
+                errorStats[type]++;
             }
+        },
+        getStats: () => {
+            return { ...errorStats };
         }
     };
 
@@ -75,17 +90,27 @@
             candidates.push(WATERMARK_TEXT);
 
             try {
+                // 尝试 Base64 解码
                 const decoded = atob(WATERMARK_TEXT);
                 if (decoded && typeof decoded === 'string') {
                     candidates.push(decoded);
 
+                    // 尝试 UTF-8 解码（处理多字节字符）
                     try {
-                        const utf8 = decodeURIComponent(escape(decoded));
-                        if (utf8 && typeof utf8 === 'string') candidates.push(utf8);
+                        const bytes = new Uint8Array(decoded.length);
+                        for (let i = 0; i < decoded.length; i++) {
+                            bytes[i] = decoded.charCodeAt(i);
+                        }
+                        const utf8 = new TextDecoder('utf-8').decode(bytes);
+                        if (utf8 && typeof utf8 === 'string' && utf8 !== decoded) {
+                            candidates.push(utf8);
+                        }
                     } catch (_) {
+                        // UTF-8 解码失败，忽略
                     }
                 }
             } catch (_) {
+                // Base64 解码失败，忽略
             }
         }
 
@@ -97,11 +122,23 @@
         if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
         const tag = element.tagName;
 
+        // 快速检查：只处理 Canvas 或常见容器元素
+        const isCanvas = tag === 'CANVAS';
+        const isDivLike = tag === 'DIV' || tag === 'SECTION' || tag === 'MAIN' || tag === 'ASIDE';
+        if (!(isCanvas || isDivLike)) return false;
+
+        // 快速检查：内联样式（避免昂贵的 getComputedStyle）
+        if (element.style) {
+            // 如果内联样式明确设置了 pointer-events 为 auto，则不是水印覆盖层
+            if (element.style.pointerEvents === 'auto') return false;
+        }
+
         let style;
         try {
             style = window.getComputedStyle(element);
         } catch (e) {
             logger.warn('获取元素样式失败:', e);
+            logger.stat('domErrors');
             return false;
         }
         if (!style) return false;
@@ -116,14 +153,12 @@
         const opacity = Number(style.opacity);
         const opacityLikely = Number.isFinite(opacity) ? opacity < 1 : false;
 
-        const isCanvas = tag === 'CANVAS';
-        const isDivLike = tag === 'DIV' || tag === 'SECTION' || tag === 'MAIN' || tag === 'ASIDE';
-
         let rect;
         try {
             rect = element.getBoundingClientRect();
         } catch (e) {
             logger.warn('获取元素尺寸失败:', e);
+            logger.stat('domErrors');
             return false;
         }
         const vw = window.innerWidth || 0;
@@ -134,8 +169,6 @@
         if (!pointerEventsNone) return false;
         if (!(hasBgImage || isCanvas)) return false;
         if (!(zIndexLikely || opacityLikely || positionLikely)) return false;
-
-        if (!(isCanvas || isDivLike)) return false;
 
         return true;
     }
@@ -156,32 +189,54 @@
         }
     }
 
-    function detectAndHideOverlays(root = document.body) {
+    // 统一的水印检测和移除函数
+    function detectAndRemoveWatermarks(root = document.body) {
         if (!root) return;
 
         const maxDepth = 12;
 
         function traverse(node, depth) {
             if (!node || depth > maxDepth) return;
+
             try {
+                // 处理元素节点
                 if (node.nodeType === Node.ELEMENT_NODE) {
-                    if (!processedElements.has(node) && isLikelyWatermarkOverlay(node)) {
+                    // 如果该节点已经处理过则直接跳过
+                    if (processedElements.has(node)) return;
+
+                    // 优先检测并隐藏水印覆盖层
+                    if (isLikelyWatermarkOverlay(node)) {
                         hideOverlayElement(node);
+                        return;
+                    }
+
+                    // 检查当前节点是否包含水印文本或图片
+                    if (WATERMARK_TEXT && (elementContainsWatermark(node) || imageContainsWatermark(node))) {
+                        removeWatermark(node);
                         return;
                     }
                 }
 
+                // 遍历子节点
                 if (node.childNodes && node.childNodes.length) {
                     for (let child of node.childNodes) {
-                        if (child.nodeType === Node.ELEMENT_NODE) {
+                        if (child.nodeType === Node.TEXT_NODE) {
+                            // 检查并移除文本节点中的水印
+                            const textContent = child.textContent || '';
+                            if (WATERMARK_TEXT && containsWatermark(textContent)) {
+                                child.remove();
+                            }
+                        } else if (child.nodeType === Node.ELEMENT_NODE) {
                             traverse(child, depth + 1);
                         }
                     }
                 }
 
+                // 处理 Shadow Root
                 if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
                     traverse(node.shadowRoot, depth + 1);
                 }
+                // 处理 Document Fragment
                 if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE && node.childNodes && node.childNodes.length) {
                     for (let child of node.childNodes) {
                         if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
@@ -190,7 +245,7 @@
                     }
                 }
             } catch (e) {
-                logger.warn('DOM遍历时出错:', e);
+                logger.warn('检测水印时出错:', e);
             }
         }
 
@@ -250,11 +305,11 @@
     // 移除水印元素
     function removeWatermark(element) {
         if (!element || processedElements.has(element)) return;
-        
+
         try {
             // 标记为已处理
             processedElements.add(element);
-            
+
             // 如果是图片水印，尝试清除背景或移除元素
             if (imageContainsWatermark(element)) {
                 // 尝试清除背景图片
@@ -270,7 +325,7 @@
                     return;
                 }
             }
-            
+
             // 检查是否是文本水印
             if (elementContainsWatermark(element)) {
                 // 如果元素只包含水印文本，直接移除
@@ -281,22 +336,28 @@
                     element.remove();
                     return;
                 }
-                
+
                 // 如果元素包含其他内容，尝试移除水印文本部分
-                // 转义特殊字符以避免正则表达式错误
-                const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const watermarkRegex = new RegExp(escapedWatermark, 'g');
-                
-                if (element.textContent) {
-                    element.textContent = element.textContent.replace(watermarkRegex, '');
+                // 使用更安全的正则表达式转义
+                if (WATERMARK_TEXT && WATERMARK_TEXT.length < 1000) {
+                    try {
+                        const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const watermarkRegex = new RegExp(escapedWatermark, 'g');
+
+                        if (element.textContent) {
+                            element.textContent = element.textContent.replace(watermarkRegex, '');
+                        }
+                        if (element.innerText) {
+                            element.innerText = element.innerText.replace(watermarkRegex, '');
+                        }
+                        if (element.innerHTML) {
+                            element.innerHTML = element.innerHTML.replace(watermarkRegex, '');
+                        }
+                    } catch (e) {
+                        logger.warn('正则表达式替换失败:', e);
+                    }
                 }
-                if (element.innerText) {
-                    element.innerText = element.innerText.replace(watermarkRegex, '');
-                }
-                if (element.innerHTML) {
-                    element.innerHTML = element.innerHTML.replace(watermarkRegex, '');
-                }
-                
+
                 // 如果移除文本后元素为空，则移除元素
                 if (!element.textContent || element.textContent.trim() === '') {
                     element.style.display = 'none';
@@ -307,65 +368,6 @@
         } catch (e) {
             logger.warn('移除水印时出错:', e);
         }
-    }
-
-    // 检测并移除水印（仅遍历给定根节点的子树，避免每次全量扫描 DOM）
-    function detectAndRemoveWatermarks(root = document.body) {
-        if (!root) return;
-
-        const maxDepth = 10;
-
-        function traverse(node, depth) {
-            if (!node || depth > maxDepth) return;
-
-            try {
-                // 只处理元素节点
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    // 如果该节点已经处理过则直接跳过
-                    if (processedElements.has(node)) return;
-
-                    if (isLikelyWatermarkOverlay(node)) {
-                        hideOverlayElement(node);
-                        return;
-                    }
-
-                    // 检查当前节点
-                    if (WATERMARK_TEXT && (elementContainsWatermark(node) || imageContainsWatermark(node))) {
-                        removeWatermark(node);
-                        return;
-                    }
-                }
-
-                // 遍历子节点
-                if (node.childNodes && node.childNodes.length) {
-                    for (let child of node.childNodes) {
-                        if (child.nodeType === Node.TEXT_NODE) {
-                            const textContent = child.textContent || '';
-                            if (WATERMARK_TEXT && containsWatermark(textContent)) {
-                                child.remove();
-                            }
-                        } else if (child.nodeType === Node.ELEMENT_NODE) {
-                            traverse(child, depth + 1);
-                        }
-                    }
-                }
-
-                if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
-                    traverse(node.shadowRoot, depth + 1);
-                }
-                if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE && node.childNodes && node.childNodes.length) {
-                    for (let child of node.childNodes) {
-                        if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                            traverse(child, depth + 1);
-                        }
-                    }
-                }
-            } catch (e) {
-                logger.warn('检测水印时出错:', e);
-            }
-        }
-
-        traverse(root, 0);
     }
 
     // 初始化检测
@@ -390,7 +392,6 @@
                 nodes.forEach((node) => {
                     if (!node) return;
                     if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                        detectAndHideOverlays(node);
                         detectAndRemoveWatermarks(node);
                     }
                 });
@@ -408,7 +409,8 @@
 
                 if (mutation.type === 'attributes') {
                     const attrName = mutation.attributeName;
-                    if (attrName === 'style' || attrName === 'src' || attrName === 'class' || attrName === 'background-image') {
+                    // 监听 style、src、class 属性变化
+                    if (attrName === 'style' || attrName === 'src' || attrName === 'class') {
                         if (mutation.target) nodesToScan.push(mutation.target);
                     }
                 }
@@ -422,7 +424,7 @@
             childList: true,      // 监听子节点的添加和删除
             subtree: true,         // 监听所有后代节点
             attributes: true,     // 监听属性变化
-            attributeFilter: ['style', 'src', 'class', 'background-image'] // 只监听特定属性
+            attributeFilter: ['style', 'src', 'class'] // 只监听特定属性
         };
 
         // 开始观察
@@ -442,61 +444,117 @@
 
     // Canvas 水印检测（拦截 Canvas 绘制操作）
     function interceptCanvas() {
-        const originalFillText = CanvasRenderingContext2D.prototype.fillText;
-        const originalStrokeText = CanvasRenderingContext2D.prototype.strokeText;
-        const originalDrawImage = CanvasRenderingContext2D.prototype.drawImage;
-        
-        CanvasRenderingContext2D.prototype.fillText = function(...args) {
-            const text = args[0];
-            if (text && containsWatermark(String(text))) {
-                return; // 不绘制包含水印的文本
-            }
-            return originalFillText.apply(this, args);
-        };
-        
-        CanvasRenderingContext2D.prototype.strokeText = function(...args) {
-            const text = args[0];
-            if (text && containsWatermark(String(text))) {
-                return; // 不绘制包含水印的文本
-            }
-            return originalStrokeText.apply(this, args);
-        };
-        
-        CanvasRenderingContext2D.prototype.drawImage = function(...args) {
-            // 检查图片源是否包含水印
-            const image = args[0];
-            if (image && image.src && containsWatermark(image.src)) {
-                return; // 不绘制包含水印的图片
-            }
-            return originalDrawImage.apply(this, args);
-        };
+        // 添加标记，避免重复修改原型
+        if (CanvasRenderingContext2D.prototype._watermarkIntercepted) {
+            logger.log('Canvas 拦截器已安装，跳过重复安装');
+            return;
+        }
 
         try {
-            if (typeof OffscreenCanvasRenderingContext2D !== 'undefined') {
+            const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+            const originalStrokeText = CanvasRenderingContext2D.prototype.strokeText;
+            const originalDrawImage = CanvasRenderingContext2D.prototype.drawImage;
+
+            CanvasRenderingContext2D.prototype.fillText = function(...args) {
+                try {
+                    const text = args[0];
+                    if (text && containsWatermark(String(text))) {
+                        return; // 不绘制包含水印的文本
+                    }
+                    return originalFillText.apply(this, args);
+                } catch (e) {
+                    // 发生错误时回退到原始实现
+                    logger.warn('fillText 拦截出错，使用原始实现:', e);
+                    logger.stat('canvasErrors');
+                    return originalFillText.apply(this, args);
+                }
+            };
+
+            CanvasRenderingContext2D.prototype.strokeText = function(...args) {
+                try {
+                    const text = args[0];
+                    if (text && containsWatermark(String(text))) {
+                        return; // 不绘制包含水印的文本
+                    }
+                    return originalStrokeText.apply(this, args);
+                } catch (e) {
+                    logger.warn('strokeText 拦截出错，使用原始实现:', e);
+                    logger.stat('canvasErrors');
+                    return originalStrokeText.apply(this, args);
+                }
+            };
+
+            CanvasRenderingContext2D.prototype.drawImage = function(...args) {
+                try {
+                    // 检查图片源是否包含水印
+                    const image = args[0];
+                    if (image && image.src && containsWatermark(image.src)) {
+                        return; // 不绘制包含水印的图片
+                    }
+                    return originalDrawImage.apply(this, args);
+                } catch (e) {
+                    logger.warn('drawImage 拦截出错，使用原始实现:', e);
+                    logger.stat('canvasErrors');
+                    return originalDrawImage.apply(this, args);
+                }
+            };
+
+            // 标记已拦截
+            CanvasRenderingContext2D.prototype._watermarkIntercepted = true;
+        } catch (e) {
+            logger.error('拦截 CanvasRenderingContext2D 失败:', e);
+            logger.stat('canvasErrors');
+        }
+
+        try {
+            if (typeof OffscreenCanvasRenderingContext2D !== 'undefined' &&
+                !OffscreenCanvasRenderingContext2D.prototype._watermarkIntercepted) {
                 const offscreenOriginalFillText = OffscreenCanvasRenderingContext2D.prototype.fillText;
                 const offscreenOriginalStrokeText = OffscreenCanvasRenderingContext2D.prototype.strokeText;
                 const offscreenOriginalDrawImage = OffscreenCanvasRenderingContext2D.prototype.drawImage;
 
                 OffscreenCanvasRenderingContext2D.prototype.fillText = function(...args) {
-                    const text = args[0];
-                    if (text && containsWatermark(String(text))) return;
-                    return offscreenOriginalFillText.apply(this, args);
+                    try {
+                        const text = args[0];
+                        if (text && containsWatermark(String(text))) return;
+                        return offscreenOriginalFillText.apply(this, args);
+                    } catch (e) {
+                        logger.warn('OffscreenCanvas fillText 拦截出错，使用原始实现:', e);
+                        logger.stat('canvasErrors');
+                        return offscreenOriginalFillText.apply(this, args);
+                    }
                 };
 
                 OffscreenCanvasRenderingContext2D.prototype.strokeText = function(...args) {
-                    const text = args[0];
-                    if (text && containsWatermark(String(text))) return;
-                    return offscreenOriginalStrokeText.apply(this, args);
+                    try {
+                        const text = args[0];
+                        if (text && containsWatermark(String(text))) return;
+                        return offscreenOriginalStrokeText.apply(this, args);
+                    } catch (e) {
+                        logger.warn('OffscreenCanvas strokeText 拦截出错，使用原始实现:', e);
+                        logger.stat('canvasErrors');
+                        return offscreenOriginalStrokeText.apply(this, args);
+                    }
                 };
 
                 OffscreenCanvasRenderingContext2D.prototype.drawImage = function(...args) {
-                    const image = args[0];
-                    if (image && image.src && containsWatermark(image.src)) return;
-                    return offscreenOriginalDrawImage.apply(this, args);
+                    try {
+                        const image = args[0];
+                        if (image && image.src && containsWatermark(image.src)) return;
+                        return offscreenOriginalDrawImage.apply(this, args);
+                    } catch (e) {
+                        logger.warn('OffscreenCanvas drawImage 拦截出错，使用原始实现:', e);
+                        logger.stat('canvasErrors');
+                        return offscreenOriginalDrawImage.apply(this, args);
+                    }
                 };
+
+                // 标记已拦截
+                OffscreenCanvasRenderingContext2D.prototype._watermarkIntercepted = true;
             }
         } catch (e) {
             logger.warn('拦截 OffscreenCanvas 失败:', e);
+            logger.stat('canvasErrors');
         }
     }
 
@@ -548,33 +606,64 @@
 
     // 拦截 CSS 样式（检查伪元素）
     function interceptStyles() {
-        // 拦截 styleSheet 的插入
-        const originalInsertRule = CSSStyleSheet.prototype.insertRule;
-        CSSStyleSheet.prototype.insertRule = function(rule, index) {
-            if (rule && WATERMARK_TEXT && containsWatermark(rule)) {
-                return -1; // 不插入包含水印的规则
-            }
-            return originalInsertRule.call(this, rule, index);
-        };
-        
-        // 拦截 style 元素的文本内容
-        const originalAppendChild = Node.prototype.appendChild;
-        Node.prototype.appendChild = function(child) {
-            if (child && child.tagName === 'STYLE' && WATERMARK_TEXT) {
-                if (child.textContent && containsWatermark(child.textContent)) {
-                    try {
-                        const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        if (escapedWatermark.length < 1000) {
-                            const watermarkRegex = new RegExp(escapedWatermark, 'g');
-                            child.textContent = child.textContent.replace(watermarkRegex, '');
-                        }
-                    } catch (e) {
-                        logger.warn('处理样式内容时出错:', e);
+        // 添加标记，避免重复修改原型
+        if (CSSStyleSheet.prototype._watermarkIntercepted) {
+            logger.log('CSS 拦截器已安装，跳过重复安装');
+            return;
+        }
+
+        try {
+            // 拦截 styleSheet 的插入
+            const originalInsertRule = CSSStyleSheet.prototype.insertRule;
+            CSSStyleSheet.prototype.insertRule = function(rule, index) {
+                try {
+                    if (rule && WATERMARK_TEXT && containsWatermark(rule)) {
+                        return -1; // 不插入包含水印的规则
                     }
+                    return originalInsertRule.call(this, rule, index);
+                } catch (e) {
+                    logger.warn('insertRule 拦截出错，使用原始实现:', e);
+                    logger.stat('styleErrors');
+                    return originalInsertRule.call(this, rule, index);
                 }
-            }
-            return originalAppendChild.call(this, child);
-        };
+            };
+
+            // 标记已拦截
+            CSSStyleSheet.prototype._watermarkIntercepted = true;
+        } catch (e) {
+            logger.error('拦截 CSSStyleSheet 失败:', e);
+            logger.stat('styleErrors');
+        }
+
+        try {
+            // 拦截 style 元素的文本内容
+            const originalAppendChild = Node.prototype.appendChild;
+            Node.prototype.appendChild = function(child) {
+                try {
+                    if (child && child.tagName === 'STYLE' && WATERMARK_TEXT) {
+                        if (child.textContent && containsWatermark(child.textContent)) {
+                            // 添加长度限制，避免处理过长的水印文本
+                            if (WATERMARK_TEXT.length < 1000) {
+                                const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                const watermarkRegex = new RegExp(escapedWatermark, 'g');
+                                child.textContent = child.textContent.replace(watermarkRegex, '');
+                            }
+                        }
+                    }
+                    return originalAppendChild.call(this, child);
+                } catch (e) {
+                    logger.warn('appendChild 拦截出错，使用原始实现:', e);
+                    logger.stat('styleErrors');
+                    return originalAppendChild.call(this, child);
+                }
+            };
+
+            // 标记已拦截
+            Node.prototype._watermarkIntercepted = true;
+        } catch (e) {
+            logger.error('拦截 Node.appendChild 失败:', e);
+            logger.stat('styleErrors');
+        }
     }
 
     // 从 API 获取用户信息和水印内容
@@ -584,10 +673,10 @@
             const browserTimeZone = (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
                 ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai')
                 : 'Asia/Shanghai';
-            
+
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
-            
+
             let response;
             try {
                 response = await fetch(USER_API_URL, {
@@ -622,10 +711,11 @@
             } catch (jsonError) {
                 const responseText = await response.text().catch(() => '无法获取响应内容');
                 logger.error('解析 API 响应失败:', jsonError, '响应内容:', responseText);
+                logger.stat('fetchErrors');
                 return false;
             }
             logger.log('API 响应:', result);
-            
+
             if (result.code === 0 && result.data && result.data.watermark) {
                 WATERMARK_TEXT = result.data.watermark;
                 rebuildWatermarkCandidates();
@@ -641,6 +731,7 @@
             } else {
                 logger.error('获取水印内容失败:', error);
             }
+            logger.stat('fetchErrors');
             return false;
         }
     }
@@ -722,21 +813,44 @@
             logger.warn('水印内容为空，无法启动移除功能');
             return false;
         }
-        
+
         logger.log('启动水印移除功能，水印内容:', WATERMARK_TEXT);
-        
+
         try {
             interceptCanvas();
             interceptStyles();
             setupObserver();
-            detectAndHideOverlays();
             detectAndRemoveWatermarks();
             clearLikelyWatermarkCanvases();
         } catch (error) {
             logger.error('启动水印移除功能时出错:', error);
             return false;
         }
-        
+
+        // 添加定期轮询检测，确保捕获动态生成的水印
+        let pollCount = 0;
+        const maxPollCount = 20; // 最多轮询 20 次
+        const pollInterval = 500; // 每 500ms 检测一次
+
+        const pollTimer = setInterval(() => {
+            pollCount++;
+            if (pollCount > maxPollCount) {
+                clearInterval(pollTimer);
+                logger.log('轮询检测完成');
+                return;
+            }
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+        }, pollInterval);
+
+        // 监听窗口 resize 事件，确保布局变化时重新检测
+        const resizeHandler = debounce(() => {
+            logger.log('窗口大小改变，重新检测水印');
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+        }, 300);
+        window.addEventListener('resize', resizeHandler);
+
         return true;
     }
 
@@ -746,7 +860,7 @@
 
         // 首先尝试获取水印内容（带重试）
         const watermarkFetched = await fetchWatermarkWithRetry(5, 1000);
-        
+
         // 如果成功获取水印，启动移除功能（startWatermarkRemoval 会执行初始检测）
         if (watermarkFetched && WATERMARK_TEXT) {
             startWatermarkRemoval();
@@ -765,6 +879,13 @@
                     }
                 }
             });
+        }
+
+        // 输出错误统计
+        const stats = logger.getStats();
+        const totalErrors = stats.fetchErrors + stats.domErrors + stats.canvasErrors + stats.styleErrors;
+        if (totalErrors > 0) {
+            console.warn('[去水印脚本] 错误统计:', stats);
         }
     }
 
