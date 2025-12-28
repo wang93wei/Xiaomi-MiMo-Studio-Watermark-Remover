@@ -304,6 +304,14 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
+### v1.3.4 (2025-12-29)
+- Fix: Fixed watermark detection timing issue by changing @run-at from document-start to document-end
+- Feature: Added periodic polling detection mechanism (every 500ms for 10 seconds)
+- Feature: Added window resize listener to re-detect watermarks on layout changes
+- Improvement: Enhanced error handling with error statistics functionality
+- Optimization: Merged duplicate detection functions for better code logic
+- Optimization: Optimized DOM traversal performance by reducing getComputedStyle calls
+
 ### v1.3.3 (2025-12-24)
 - Performance: Removed redundant DOM scans, cleanup process now executes once
 - Code: Removed duplicate initialization calls, streamlined main flow
