@@ -304,6 +304,17 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
+### v1.3.5 (2025-12-30)
+- Security fix: Fixed memory leak risk by adding cleanup mechanism for timers and event listeners
+- Security fix: Fixed prototype pollution risk by using Object.defineProperty to reduce impact on third-party code
+- Security fix: Fixed recursion depth issue by converting recursion to iteration and adding node count limits
+- Performance: Added style caching mechanism to reduce getComputedStyle calls
+- Security fix: Fixed regex DoS risk by adding safety validation and timeout protection
+- Code improvement: Added configuration constants object to centrally manage all configuration parameters
+- Error handling: Enhanced network error handling and API response validation
+- Edge cases: Improved handling for zero viewport size and proper handling of zIndex as 'auto'
+- Input validation: Added input validation for critical functions to prevent issues from invalid inputs
+
 ### v1.3.4 (2025-12-29)
 - Fix: Fixed watermark detection timing issue by changing @run-at from document-start to document-end
 - Feature: Added periodic polling detection mechanism (every 500ms for 10 seconds)
