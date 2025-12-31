@@ -14,6 +14,9 @@
 - 更新水印检测时序图，展示迭代遍历
 - 更新性能优化时序图，展示缓存机制
 - 更新完整交互时序图，包含所有新组件
+- 修正清理机制时序图，反映实际实现（仅清除定时器和事件监听器）
+- 修正覆盖层检测时序图，包含MAIN和ASIDE标签类型
+- 移除整体架构和完整交互时序图中的页面卸载cleanup调用说明
 
 ## 1. 整体架构时序图
 
@@ -61,12 +64,6 @@ sequenceDiagram
         Script->>DOM: 检测并移除水印
         DOM-->>Script: 移除完成
     end
-
-    Note over Script,Cache: 页面卸载时
-    Script->>Script: 调用 cleanup()
-    Script->>Observer: 清除 MutationObserver
-    Script->>Canvas: 清除定时器
-    Script->>Cache: 清空样式缓存
 ```
 
 ## 2. 水印获取时序图
@@ -429,7 +426,7 @@ sequenceDiagram
         Style-->>Checker: 背景图片
         
         Checker->>Element: 检查标签类型
-        Element-->>Checker: DIV/CANVAS/SECTION
+        Element-->>Checker: DIV/CANVAS/SECTION/MAIN/ASIDE
         
         Checker->>DOMRect: 获取元素尺寸
         DOMRect-->>Checker: width, height
@@ -582,12 +579,6 @@ sequenceDiagram
     else 不包含水印
         Canvas->>Canvas: 正常绘制
     end
-
-    Note over Script,Canvas: 页面卸载时
-    Script->>Script: 调用 cleanup()
-    Script->>Observer: 清除 MutationObserver
-    Script->>Canvas: 清除定时器
-    Script->>StyleCache: 清空样式缓存
 ```
 
 这些时序图全面展示了 Xiaomi MiMo Studio 去水印脚本的组件交互和执行流程。
@@ -635,30 +626,14 @@ sequenceDiagram
         Timer-->>Script: 新 pollTimer 引用
         Script->>EventListener: 添加新的 resize 监听器
         EventListener-->>Script: 新 resizeHandler 引用
+
+        Script->>Observer: 创建新的 MutationObserver
+        Observer-->>Script: 新 observer 引用
     end
 
     Note over Script,Timer: 脚本继续运行...
 
-    alt 页面卸载或脚本停用
-        Script->>Script: 自动调用 cleanup()
-
-        Script->>Timer: 清除所有定时器
-        Timer-->>Script: 所有定时器已清除
-
-        Script->>EventListener: 移除所有事件监听器
-        EventListener-->>Script: 所有监听器已移除
-
-        Script->>Observer: 断开 MutationObserver
-        Observer-->>Script: 已断开
-
-        Script->>StyleCache: 清空样式缓存
-        StyleCache-->>Script: 缓存已清空
-
-        Script->>ProcessedCache: 清空已处理缓存
-        ProcessedCache-->>Script: 缓存已清空
-
-        Script-->>Script: 清理完成
-    end
+    Note over Script,Timer: 注意：当前实现中 cleanup() 函数仅清除定时器和事件监听器，未实现断开 MutationObserver 和清空缓存的逻辑
 ```
 
 ## 11. 安全验证时序图
