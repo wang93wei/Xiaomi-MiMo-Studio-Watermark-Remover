@@ -2,7 +2,7 @@
 
 A Tampermonkey userscript that automatically detects and removes watermarks from Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) pages.
 
-🇨🇳 [中文](./doc/README_zh.md) | 🇺🇸 **English**
+🇨🇳 [中文](./README_zh.md) | 🇺🇸 **English**
 
 ---
 
