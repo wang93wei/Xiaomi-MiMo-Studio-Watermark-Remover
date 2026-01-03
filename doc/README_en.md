@@ -316,6 +316,17 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
+### v1.3.6 (2026-01-04)
+- Code Refactoring: Fixed code formatting issues, unified indentation and blank lines
+- Function Optimization: Standardized startWatermarkRemoval function definition, fixed scope issues
+- Performance Optimization: Optimized containsWatermark function, removed redundant filtering logic, pre-filtered in rebuildWatermarkCandidates
+- Performance Optimization: Improved regex replacement timeout check logic, moved timeout check to before and after the entire operation
+- Code Refactoring: Split isLikelyWatermarkOverlay function into 8 helper functions for better maintainability
+- Cache Optimization: Improved style cache cleanup logic, ensures clearing element caches in Shadow Root
+- API Optimization: Simplified API request headers from 12 to 3, reducing risk of being identified as a crawler
+- Feature Added: Added configuration switches to control prototype chain modifications (ENABLE_CANVAS_INTERCEPT, ENABLE_CSS_INTERCEPT, ENABLE_APPEND_CHILD_INTERCEPT)
+- Documentation Updated: Updated sequence diagram documentation to reflect all code improvements
+
 ### v1.3.4 (2025-12-29)
 - Fix: Fixed watermark detection timing issue by changing @run-at from document-start to document-end
 - Feature: Added periodic polling detection mechanism (every 500ms for 10 seconds)

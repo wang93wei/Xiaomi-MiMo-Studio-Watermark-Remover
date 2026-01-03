@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.3.5
+// @version      1.3.6
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -46,6 +46,11 @@
         // 防抖配置
         OBSERVER_DEBOUNCE: 50,      // MutationObserver 防抖延迟（毫秒）
         RESIZE_DEBOUNCE: 300,       // resize 事件防抖延迟（毫秒）
+
+        // 原型链拦截配置
+        ENABLE_CANVAS_INTERCEPT: true,   // 启用 Canvas 拦截
+        ENABLE_CSS_INTERCEPT: false,     // 启用 CSS 拦截（默认关闭，可能影响页面功能）
+        ENABLE_APPEND_CHILD_INTERCEPT: false,  // 启用 appendChild 拦截（默认关闭，可能影响页面功能）
     };
 
     // 错误统计
@@ -134,11 +139,8 @@
         if (typeof text !== 'string') return false;
         if (!Array.isArray(WATERMARK_TEXT_CANDIDATES) || WATERMARK_TEXT_CANDIDATES.length === 0) return false;
 
-        // 过滤掉空字符串和无效候选
-        const validCandidates = WATERMARK_TEXT_CANDIDATES.filter(c => c && typeof c === 'string' && c.length > 0);
-        if (validCandidates.length === 0) return false;
-
-        return validCandidates.some((candidate) => text.includes(candidate));
+        // 候选列表已在 rebuildWatermarkCandidates 中预过滤，直接使用
+        return WATERMARK_TEXT_CANDIDATES.some((candidate) => text.includes(candidate));
     }
 
     // 检查水印文本是否安全，防止正则表达式拒绝服务攻击
@@ -192,49 +194,76 @@
             // Base64 解码失败，忽略
         }
 
-        WATERMARK_TEXT_CANDIDATES = Array.from(new Set(candidates.filter(Boolean)));
+        // 预过滤候选列表，只保留有效的字符串
+        WATERMARK_TEXT_CANDIDATES = Array.from(new Set(
+            candidates.filter(c => c && typeof c === 'string' && c.length > 0)
+        ));
         logger.log('水印匹配候选:', WATERMARK_TEXT_CANDIDATES);
     }
 
-    function isLikelyWatermarkOverlay(element) {
+    // 检查元素是否是有效的水印候选元素（Canvas 或容器元素）
+    function isValidWatermarkElement(element) {
         if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
         const tag = element.tagName;
-
-        // 快速检查：只处理 Canvas 或常见容器元素
         const isCanvas = tag === 'CANVAS';
         const isDivLike = tag === 'DIV' || tag === 'SECTION' || tag === 'MAIN' || tag === 'ASIDE';
-        if (!(isCanvas || isDivLike)) return false;
+        return isCanvas || isDivLike;
+    }
 
-        // 快速检查：内联样式（避免昂贵的 getComputedStyle）
-        if (element.style) {
-            // 如果内联样式明确设置了 pointer-events 为 auto，则不是水印覆盖层
-            if (element.style.pointerEvents === 'auto') return false;
-        }
+    // 检查元素是否设置了 pointer-events: none
+    function hasPointerEventsNone(element) {
+        // 快速检查：内联样式
+        if (element.style && element.style.pointerEvents === 'auto') return false;
 
         const style = getCachedStyle(element);
         if (!style) return false;
+        return style.pointerEvents === 'none';
+    }
 
-        const pointerEventsNone = style.pointerEvents === 'none';
-        const positionLikely = style.position === 'fixed' || style.position === 'absolute';
+    // 检查元素是否有高 z-index（>= 100）
+    function hasHighZIndex(element) {
+        const style = getCachedStyle(element);
+        if (!style) return false;
 
-        // 正确处理 zIndex
         const zIndexStr = style.zIndex;
-        let zIndexLikely = false;
         if (zIndexStr && zIndexStr !== 'auto') {
             const zIndex = Number(zIndexStr);
-            zIndexLikely = Number.isFinite(zIndex) && zIndex >= 100;
+            return Number.isFinite(zIndex) && zIndex >= 100;
         }
+        return false;
+    }
 
-        const bgImage = style.backgroundImage;
-        const hasBgImage = bgImage && bgImage !== 'none';
+    // 检查元素是否有低透明度（< 1）
+    function hasLowOpacity(element) {
+        const style = getCachedStyle(element);
+        if (!style) return false;
 
         const opacityStr = style.opacity;
-        let opacityLikely = false;
         if (opacityStr && opacityStr !== 'auto') {
             const opacity = Number(opacityStr);
-            opacityLikely = Number.isFinite(opacity) && opacity < 1;
+            return Number.isFinite(opacity) && opacity < 1;
         }
+        return false;
+    }
 
+    // 检查元素是否有绝对定位（fixed 或 absolute）
+    function hasAbsolutePosition(element) {
+        const style = getCachedStyle(element);
+        if (!style) return false;
+        return style.position === 'fixed' || style.position === 'absolute';
+    }
+
+    // 检查元素是否有背景图片
+    function hasBackgroundImage(element) {
+        const style = getCachedStyle(element);
+        if (!style) return false;
+
+        const bgImage = style.backgroundImage;
+        return bgImage && bgImage !== 'none';
+    }
+
+    // 检查元素是否覆盖大部分视口（>= 90%）
+    function coversMostViewport(element) {
         let rect;
         try {
             rect = element.getBoundingClientRect();
@@ -254,13 +283,23 @@
         const docWidth = useDocWidth ? document.documentElement.scrollWidth : vw;
         const docHeight = useDocHeight ? document.documentElement.scrollHeight : vh;
 
-        const coversMostViewport = (docWidth > 0 && docHeight > 0) &&
-                                   (rect.width >= docWidth * 0.9 && rect.height >= docHeight * 0.9);
+        return (docWidth > 0 && docHeight > 0) &&
+               (rect.width >= docWidth * 0.9 && rect.height >= docHeight * 0.9);
+    }
 
-        if (!coversMostViewport) return false;
-        if (!pointerEventsNone) return false;
-        if (!(hasBgImage || isCanvas)) return false;
-        if (!(zIndexLikely || opacityLikely || positionLikely)) return false;
+    // 主函数：检查元素是否可能是水印覆盖层
+    function isLikelyWatermarkOverlay(element) {
+        if (!isValidWatermarkElement(element)) return false;
+        if (!hasPointerEventsNone(element)) return false;
+
+        const isCanvas = element.tagName === 'CANVAS';
+        if (!hasBackgroundImage(element) && !isCanvas) return false;
+
+        if (!coversMostViewport(element)) return false;
+
+        // 至少满足以下条件之一：高 z-index、低透明度、绝对定位
+        const hasStyleLikely = hasHighZIndex(element) || hasLowOpacity(element) || hasAbsolutePosition(element);
+        if (!hasStyleLikely) return false;
 
         return true;
     }
@@ -443,26 +482,29 @@
                         const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         const watermarkRegex = new RegExp(escapedWatermark, 'g');
 
-                        // 添加超时保护
+                        // 添加超时保护，在整个操作前后检查
                         const startTime = Date.now();
                         const maxTime = CONFIG.REGEX_TIMEOUT;
 
+                        // 检查是否超时
+                        if (Date.now() - startTime > maxTime) {
+                            logger.warn('正则替换超时，跳过');
+                            return;
+                        }
+
                         if (element.textContent) {
                             element.textContent = element.textContent.replace(watermarkRegex, '');
-                            if (Date.now() - startTime > maxTime) {
-                                logger.warn('正则替换超时，跳过');
-                                return;
-                            }
                         }
                         if (element.innerText) {
                             element.innerText = element.innerText.replace(watermarkRegex, '');
-                            if (Date.now() - startTime > maxTime) {
-                                logger.warn('正则替换超时，跳过');
-                                return;
-                            }
                         }
                         if (element.innerHTML) {
                             element.innerHTML = element.innerHTML.replace(watermarkRegex, '');
+                        }
+
+                        // 最终超时检查
+                        if (Date.now() - startTime > maxTime) {
+                            logger.warn('正则替换超时，部分替换可能未完成');
                         }
                     } catch (e) {
                         logger.warn('正则表达式替换失败:', e);
@@ -511,6 +553,15 @@
                         // 清除所有子元素的缓存
                         const children = node.querySelectorAll ? node.querySelectorAll('*') : [];
                         children.forEach(el => styleCache.delete(el));
+                        // 清除 Shadow Root 中的元素缓存
+                        if (node.shadowRoot) {
+                            const shadowChildren = node.shadowRoot.querySelectorAll ? node.shadowRoot.querySelectorAll('*') : [];
+                            shadowChildren.forEach(el => styleCache.delete(el));
+                        }
+                    } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                        // 清除 Document Fragment（如 Shadow Root）中的所有元素缓存
+                        const fragmentChildren = node.querySelectorAll ? node.querySelectorAll('*') : [];
+                        fragmentChildren.forEach(el => styleCache.delete(el));
                     }
 
                     if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
@@ -566,6 +617,12 @@
 
     // Canvas 水印检测（拦截 Canvas 绘制操作）
     function interceptCanvas() {
+        // 检查配置开关
+        if (!CONFIG.ENABLE_CANVAS_INTERCEPT) {
+            logger.log('Canvas 拦截已禁用，跳过');
+            return;
+        }
+
         // 添加标记，避免重复修改原型
         if (CanvasRenderingContext2D.prototype._watermarkIntercepted) {
             logger.log('Canvas 拦截器已安装，跳过重复安装');
@@ -763,6 +820,12 @@
 
     // 拦截 CSS 样式（检查伪元素）
     function interceptStyles() {
+        // 检查配置开关
+        if (!CONFIG.ENABLE_CSS_INTERCEPT && !CONFIG.ENABLE_APPEND_CHILD_INTERCEPT) {
+            logger.log('CSS 拦截已禁用，跳过');
+            return;
+        }
+
         // 添加标记，避免重复修改原型
         if (CSSStyleSheet.prototype._watermarkIntercepted) {
             logger.log('CSS 拦截器已安装，跳过重复安装');
@@ -771,19 +834,21 @@
 
         try {
             // 拦截 styleSheet 的插入
-            const originalInsertRule = CSSStyleSheet.prototype.insertRule;
-            CSSStyleSheet.prototype.insertRule = function(rule, index) {
-                try {
-                    if (rule && WATERMARK_TEXT && containsWatermark(rule)) {
-                        return -1; // 不插入包含水印的规则
+            if (CONFIG.ENABLE_CSS_INTERCEPT) {
+                const originalInsertRule = CSSStyleSheet.prototype.insertRule;
+                CSSStyleSheet.prototype.insertRule = function(rule, index) {
+                    try {
+                        if (rule && WATERMARK_TEXT && containsWatermark(rule)) {
+                            return -1; // 不插入包含水印的规则
+                        }
+                        return originalInsertRule.call(this, rule, index);
+                    } catch (e) {
+                        logger.warn('insertRule 拦截出错，使用原始实现:', e);
+                        logger.stat('styleErrors');
+                        return originalInsertRule.call(this, rule, index);
                     }
-                    return originalInsertRule.call(this, rule, index);
-                } catch (e) {
-                    logger.warn('insertRule 拦截出错，使用原始实现:', e);
-                    logger.stat('styleErrors');
-                    return originalInsertRule.call(this, rule, index);
-                }
-            };
+                };
+            }
 
             // 标记已拦截
             Object.defineProperty(CSSStyleSheet.prototype, '_watermarkIntercepted', {
@@ -798,26 +863,28 @@
 
         try {
             // 拦截 style 元素的文本内容
-            const originalAppendChild = Node.prototype.appendChild;
-            Node.prototype.appendChild = function(child) {
-                try {
-                    if (child && child.tagName === 'STYLE' && WATERMARK_TEXT) {
-                        if (child.textContent && containsWatermark(child.textContent)) {
-                            // 添加长度限制，避免处理过长的水印文本
-                            if (WATERMARK_TEXT.length < CONFIG.MAX_WATERMARK_LENGTH) {
-                                const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                                const watermarkRegex = new RegExp(escapedWatermark, 'g');
-                                child.textContent = child.textContent.replace(watermarkRegex, '');
+            if (CONFIG.ENABLE_APPEND_CHILD_INTERCEPT) {
+                const originalAppendChild = Node.prototype.appendChild;
+                Node.prototype.appendChild = function(child) {
+                    try {
+                        if (child && child.tagName === 'STYLE' && WATERMARK_TEXT) {
+                            if (child.textContent && containsWatermark(child.textContent)) {
+                                // 添加长度限制，避免处理过长的水印文本
+                                if (WATERMARK_TEXT.length < CONFIG.MAX_WATERMARK_LENGTH) {
+                                    const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                    const watermarkRegex = new RegExp(escapedWatermark, 'g');
+                                    child.textContent = child.textContent.replace(watermarkRegex, '');
+                                }
                             }
                         }
+                        return originalAppendChild.call(this, child);
+                    } catch (e) {
+                        logger.warn('appendChild 拦截出错，使用原始实现:', e);
+                        logger.stat('styleErrors');
+                        return originalAppendChild.call(this, child);
                     }
-                    return originalAppendChild.call(this, child);
-                } catch (e) {
-                    logger.warn('appendChild 拦截出错，使用原始实现:', e);
-                    logger.stat('styleErrors');
-                    return originalAppendChild.call(this, child);
-                }
-            };
+                };
+            }
 
             // 标记已拦截
             Object.defineProperty(Node.prototype, '_watermarkIntercepted', {
@@ -847,16 +914,8 @@
                 response = await fetch(USER_API_URL, {
                     method: 'GET',
                     headers: {
-                        'accept': '*/*',
-                        'accept-language': 'system',
-                        'cache-control': 'no-cache',
+                        'accept': 'application/json',
                         'content-type': 'application/json',
-                        'dnt': '1',
-                        'pragma': 'no-cache',
-                        'referer': 'https://aistudio.xiaomimimo.com/',
-                        'sec-fetch-dest': 'empty',
-                        'sec-fetch-mode': 'cors',
-                        'sec-fetch-site': 'same-origin',
                         'x-timezone': browserTimeZone,
                     },
                     credentials: 'include',
@@ -1008,233 +1067,71 @@
 
     // 启动检测和移除功能
 
-    
+    // 全局变量存储定时器和事件监听器引用，防止内存泄漏
+    let pollTimer = null;
+    let resizeHandler = null;
 
-        // 全局变量存储定时器和事件监听器引用，防止内存泄漏
+    // 清理函数，用于清理定时器和事件监听器
+    function cleanup() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        if (resizeHandler) {
+            window.removeEventListener('resize', resizeHandler);
+            resizeHandler = null;
+        }
+    }
 
-        let pollTimer = null;
-
-        let resizeHandler = null;
-
-    
-
-        // 清理函数，用于清理定时器和事件监听器
-
-        function cleanup() {
-
-            if (pollTimer) {
-
-                clearInterval(pollTimer);
-
-                pollTimer = null;
-
-            }
-
-            if (resizeHandler) {
-
-                window.removeEventListener('resize', resizeHandler);
-
-                resizeHandler = null;
-
-            }
-
+    function startWatermarkRemoval() {
+        if (!WATERMARK_TEXT) {
+            logger.warn('水印内容为空，无法启动移除功能');
+            return false;
         }
 
-    
-
-        function startWatermarkRemoval() {
-
-    
-
-                if (!WATERMARK_TEXT) {
-
-    
-
-                    logger.warn('水印内容为空，无法启动移除功能');
-
-    
-
-                    return false;
-
-    
-
-                }
-
-    
-
-        
-
-    
-
-                logger.log('启动水印移除功能，水印内容:', WATERMARK_TEXT);
-
-    
-
-        
-
-    
-
-                try {
-
-    
-
-                    interceptCanvas();
-
-    
-
-                    interceptStyles();
-
-    
-
-                    setupObserver();
-
-    
-
-                    detectAndRemoveWatermarks();
-
-    
-
-                    clearLikelyWatermarkCanvases();
-
-    
-
-                } catch (error) {
-
-    
-
-                    logger.error('启动水印移除功能时出错:', error);
-
-    
-
-                    return false;
-
-    
-
-                }
-
-    
-
-        
-
-    
-
-                // 清理旧的定时器和事件监听器，防止重复注册
-
-    
-
-                cleanup();
-
-    
-
-        
-
-    
-
-                // 添加定期轮询检测，确保捕获动态生成的水印
-
-    
-
-                let pollCount = 0;
-
-    
-
-                const maxPollCount = CONFIG.MAX_POLL_COUNT;
-
-    
-
-                const pollInterval = CONFIG.POLL_INTERVAL;
-
-    
-
-        
-
-    
-
-                pollTimer = setInterval(() => {
-
-    
-
-                    pollCount++;
-
-    
-
-                    if (pollCount > maxPollCount) {
-
-    
-
-                        clearInterval(pollTimer);
-
-    
-
-                        pollTimer = null;
-
-    
-
-                        logger.log('轮询检测完成');
-
-    
-
-                        return;
-
-    
-
-                    }
-
-    
-
-                    detectAndRemoveWatermarks();
-
-    
-
-                    clearLikelyWatermarkCanvases();
-
-    
-
-                }, pollInterval);
-
-    
-
-        
-
-    
-
-                // 监听窗口 resize 事件，确保布局变化时重新检测
-
-    
-
-                resizeHandler = debounce(() => {
-
-    
-
-                    logger.log('窗口大小改变，重新检测水印');
-
-    
-
-                    detectAndRemoveWatermarks();
-
-    
-
-                    clearLikelyWatermarkCanvases();
-
-    
-
-                }, CONFIG.RESIZE_DEBOUNCE);
-
-    
-
-                window.addEventListener('resize', resizeHandler);
-
-    
-
-        
-
-    
-
-                return true;
-
-    
-
+        logger.log('启动水印移除功能，水印内容:', WATERMARK_TEXT);
+
+        try {
+            interceptCanvas();
+            interceptStyles();
+            setupObserver();
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+        } catch (error) {
+            logger.error('启动水印移除功能时出错:', error);
+            return false;
+        }
+
+        // 清理旧的定时器和事件监听器，防止重复注册
+        cleanup();
+
+        // 添加定期轮询检测，确保捕获动态生成的水印
+        let pollCount = 0;
+        const maxPollCount = CONFIG.MAX_POLL_COUNT;
+        const pollInterval = CONFIG.POLL_INTERVAL;
+
+        pollTimer = setInterval(() => {
+            pollCount++;
+            if (pollCount > maxPollCount) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                logger.log('轮询检测完成');
+                return;
             }
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+        }, pollInterval);
+
+        // 监听窗口 resize 事件，确保布局变化时重新检测
+        resizeHandler = debounce(() => {
+            logger.log('窗口大小改变，重新检测水印');
+            detectAndRemoveWatermarks();
+            clearLikelyWatermarkCanvases();
+        }, CONFIG.RESIZE_DEBOUNCE);
+        window.addEventListener('resize', resizeHandler);
+
+        return true;
+    }
 
     // 主函数
     async function main() {

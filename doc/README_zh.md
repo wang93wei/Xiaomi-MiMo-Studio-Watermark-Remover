@@ -316,6 +316,17 @@ console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
 
 ## 📝 版本历史
 
+### v1.3.6 (2026-01-04)
+- 代码重构：修复代码格式问题，统一缩进和空行
+- 函数优化：将 startWatermarkRemoval 函数定义规范化，修复作用域问题
+- 性能优化：优化 containsWatermark 函数，移除重复的过滤逻辑，在 rebuildWatermarkCandidates 中预过滤
+- 性能优化：改进正则替换超时检查逻辑，将超时检查移到整个操作的前后
+- 代码重构：拆分 isLikelyWatermarkOverlay 函数，创建 8 个辅助函数提高可维护性
+- 缓存优化：改进样式缓存清理逻辑，确保清理 Shadow Root 中的元素缓存
+- API 优化：简化 API 请求 headers，从 12 个减少到 3 个，降低被识别为爬虫的风险
+- 功能新增：添加配置开关控制原型链修改（ENABLE_CANVAS_INTERCEPT、ENABLE_CSS_INTERCEPT、ENABLE_APPEND_CHILD_INTERCEPT）
+- 文档更新：更新时序图文档，反映所有代码改进
+
 ### v1.3.5 (2025-12-30)
 - 安全修复：修复内存泄漏风险，添加定时器和事件监听器的清理机制
 - 安全修复：修复原型链污染风险，使用 Object.defineProperty 减少对第三方代码的影响
