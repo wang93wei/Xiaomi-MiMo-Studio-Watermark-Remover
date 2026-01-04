@@ -94,9 +94,41 @@
 const ENABLE_LOG = false;
 ```
 
+### 核心配置选项
+
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `ENABLE_LOG` | Boolean | `false` | 控制是否输出调试日志，`true` 启用，`false` 关闭 |
+| `MAX_DEPTH` | Number | `12` | 最大遍历深度，防止调用栈溢出 |
+| `MAX_NODES` | Number | `10000` | 最大处理节点数，防止性能问题 |
+| `MAX_POLL_COUNT` | Number | `20` | 最大轮询次数 |
+| `POLL_INTERVAL` | Number | `500` | 轮询间隔（毫秒） |
+| `MAX_RETRIES` | Number | `5` | API 请求最大重试次数 |
+| `RETRY_DELAY` | Number | `1000` | 初始重试延迟（毫秒） |
+| `RETRY_BACKOFF` | Number | `1.5` | 重试退避倍数 |
+| `FETCH_TIMEOUT` | Number | `10000` | API 请求超时（毫秒） |
+| `REGEX_TIMEOUT` | Number | `100` | 正则替换超时（毫秒） |
+| `MAX_WATERMARK_LENGTH` | Number | `500` | 水印文本最大长度 |
+| `MIN_WATERMARK_LENGTH` | Number | `1` | 水印文本最小长度 |
+| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver 防抖延迟（毫秒） |
+| `RESIZE_DEBOUNCE` | Number | `300` | resize 事件防抖延迟（毫秒） |
+
+### 拦截配置选项
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | 启用 Canvas API 拦截 |
+| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | 启用 CSS 样式拦截（默认关闭） |
+| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | 启用 appendChild 拦截（默认关闭） |
+
+### 性能优化配置
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | 视口覆盖阈值（90%）用于覆盖层检测 |
+| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 匹配长度上限用于水印检测 |
+| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | 页面加载等待时间（毫秒） |
+| `USE_TREE_WALKER` | Boolean | `false` | 使用 TreeWalker API 进行 DOM 遍历（实验性） |
 
 ### 启用日志进行调试
 
@@ -112,6 +144,22 @@ const ENABLE_LOG = true;
 - DOM 变化监听
 - Canvas 拦截记录
 - 错误和警告信息
+
+### 性能优化选项
+
+高级用户可以调整以下选项以获得更好的性能：
+
+1. **TreeWalker API**：设置 `USE_TREE_WALKER` 为 `true` 使用 TreeWalker API 进行 DOM 遍历（在大页面上可能提升性能）
+2. **防抖设置**：调整 `OBSERVER_DEBOUNCE` 和 `RESIZE_DEBOUNCE` 以平衡响应性和性能
+3. **节点限制**：根据页面复杂度调整 `MAX_NODES` 和 `MAX_DEPTH`
+
+### 拦截控制
+
+脚本提供对原型链修改的精细控制：
+
+- **Canvas 拦截**：默认启用，拦截 Canvas 绘制操作
+- **CSS 拦截**：默认关闭，需要时可启用（可能影响页面功能）
+- **appendChild 拦截**：默认关闭，需要时可启用（可能影响页面功能）
 
 ## 🔬 工作原理
 
@@ -315,6 +363,23 @@ console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
 - Tampermonkey 扩展
 
 ## 📝 版本历史
+
+### v1.3.7 (2026-01-05)
+- **代码质量改进**：
+  - 将 `detectAndRemoveWatermarks` 函数重构为 6 个子函数，提高可维护性
+  - 将魔法数字提取到 CONFIG 对象（VIEWPORT_COVERAGE_THRESHOLD、BASE64_MATCH_MAX_LENGTH、PAGE_LOAD_WAIT_TIME）
+  - 添加正则表达式缓存，避免重复编译
+  - 增强错误日志，添加上下文信息（错误、堆栈、时间戳、URL、用户代理）
+  - 添加配置验证函数，防止配置错误
+  - 将 `clearLikelyWatermarkCanvases` 重命名为 `clearSuspectedWatermarkCanvases`，语义更清晰
+- **性能优化**：
+  - 实现 TreeWalker API 选项用于 DOM 遍历（实验性功能）
+  - 优化样式缓存失效策略，支持精细的缓存清理（attribute、childList、default）
+  - 修复 MutationObserver 中的防抖逻辑，确保性能优化生效
+- **Bug 修复**：
+  - 修复防抖逻辑问题，导致频繁扫描
+  - 修复配置验证，包含所有新增配置项
+  - 修复 TreeWalker 递归调用问题，可能导致节点处理限制失效
 
 ### v1.3.6 (2026-01-04)
 - 代码重构：修复代码格式问题，统一缩进和空行

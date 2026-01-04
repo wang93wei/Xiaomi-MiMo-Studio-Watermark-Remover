@@ -1,10 +1,20 @@
 # Xiaomi MiMo Studio 去水印脚本 - 时序图文档
 
-**版本**: v1.3.6 | **更新日期**: 2026-01-04
+**版本**: v1.3.7 | **更新日期**: 2026-01-05
 
 本文档包含项目的时序图，展示脚本各组件之间的时间交互关系。
 
 ## 文档更新说明
+
+### v1.3.7 更新内容
+- 添加配置验证时序图，展示启动时的配置验证流程
+- 更新水印检测时序图，展示函数拆分后的子函数调用流程
+- 更新 DOM 监听时序图，展示精细的缓存清理策略（attribute、childList、default）
+- 更新性能优化时序图，添加正则表达式缓存和 TreeWalker 选项
+- 更新错误处理时序图，展示增强的错误日志格式化
+- 更新完整交互时序图，包含配置验证和配置开关控制
+- 更新水印移除时序图，展示正则表达式缓存的使用
+- 添加配置验证时序图，展示所有配置项的验证流程
 
 ### v1.3.6 更新内容
 - 重构覆盖层检测时序图，展示函数拆分后的辅助函数调用流程
@@ -877,6 +887,212 @@ sequenceDiagram
     Note over Script,Logger: 配置开关允许用户控制激进的原型链修改，减少对页面功能的影响
 ```
 
+## 13. 配置验证时序图
 
+```mermaid
+sequenceDiagram
+    participant Main as 主函数
+    participant Config as 配置系统
+    participant Validator as 验证器
+    participant Logger as 日志系统
+
+    Main->>Main: 脚本启动
+    Main->>Config: 传入 CONFIG 对象
+    Config-->>Validator: 验证配置
+
+    Validator->>Validator: 初始化错误列表
+
+    par 并行验证所有配置项
+        Validator->>Validator: 验证 MAX_DEPTH (1-20)
+        Validator->>Validator: 验证 MAX_NODES (100-100000)
+        Validator->>Validator: 验证 MAX_POLL_COUNT (1-100)
+        Validator->>Validator: 验证 POLL_INTERVAL (100-10000)
+        Validator->>Validator: 验证 MAX_RETRIES (0-10)
+        Validator->>Validator: 验证 RETRY_DELAY (100-60000)
+        Validator->>Validator: 验证 RETRY_BACKOFF (1-3)
+        Validator->>Validator: 验证 FETCH_TIMEOUT (1000-60000)
+        Validator->>Validator: 验证 REGEX_TIMEOUT (10-10000)
+        Validator->>Validator: 验证 MAX_WATERMARK_LENGTH (1-10000)
+        Validator->>Validator: 验证 MIN_WATERMARK_LENGTH (1-MAX)
+        Validator->>Validator: 验证 OBSERVER_DEBOUNCE (10-1000)
+        Validator->>Validator: 验证 RESIZE_DEBOUNCE (100-5000)
+        Validator->>Validator: 验证 VIEWPORT_COVERAGE_THRESHOLD (0.5-1)
+        Validator->>Validator: 验证 BASE64_MATCH_MAX_LENGTH (10-1000)
+        Validator->>Validator: 验证 PAGE_LOAD_WAIT_TIME (1000-10000)
+        Validator->>Validator: 验证 USE_TREE_WALKER (boolean)
+    end
+
+    alt 发现配置错误
+        Validator->>Logger: 记录所有错误
+        Logger-->>Validator: 错误列表
+        Validator-->>Main: 抛出异常
+        Main->>Logger: 记录配置验证失败
+        Main->>Main: 终止脚本启动
+    else 所有配置有效
+        Validator->>Logger: 记录验证通过
+        Validator-->>Main: 验证成功
+        Main->>Main: 继续执行初始化
+    end
+```
+
+## 14. 正则表达式缓存时序图
+
+```mermaid
+sequenceDiagram
+    participant Remover as 移除器
+    participant RegexCache as 正则缓存
+    participant WatermarkText as 水印文本
+    participant Validator as 验证器
+
+    Remover->>RegexCache: getWatermarkRegex(watermarkText)
+
+    alt 水印文本为空或无效
+        RegexCache->>Validator: 验证输入
+        Validator-->>RegexCache: 无效
+        RegexCache-->>Remover: 返回 null
+    else 水印文本有效
+        RegexCache->>RegexCache: 检查缓存
+
+        alt 缓存命中
+            RegexCache->>RegexCache: 获取缓存的正则表达式
+            RegexCache-->>Remover: 返回缓存的正则表达式
+        else 缓存未命中
+            RegexCache->>WatermarkText: 转义特殊字符
+            WatermarkText-->>RegexCache: 转义后的字符串
+
+            RegexCache->>RegexCache: 创建正则表达式 (全局标志)
+            RegexCache->>RegexCache: 存入缓存
+            RegexCache-->>Remover: 返回新创建的正则表达式
+        end
+    end
+
+    Remover->>Remover: 使用正则表达式替换水印文本
+
+    Note over Remover,RegexCache: 后续调用相同水印文本时直接从缓存获取，避免重复编译
+```
+
+## 15. 函数重构时序图
+
+```mermaid
+sequenceDiagram
+    participant Main as 主函数
+    participant Scanner as 检测器
+    participant StackInit as 栈初始化器
+    participant ElementProcessor as 元素处理器
+    participant ChildProcessor as 子节点处理器
+    participant ShadowProcessor as Shadow处理器
+    participant LimitChecker as 限制检查器
+
+    Main->>Scanner: detectAndRemoveWatermarks(root)
+
+    Scanner->>Scanner: 检查 root 是否有效
+
+    alt root 无效
+        Scanner-->>Main: 直接返回
+    else root 有效
+        Scanner->>StackInit: initializeTraversalStack(root)
+        StackInit-->>Scanner: 初始化的栈 [{node: root, depth: 0}]
+
+        Scanner->>Scanner: 设置遍历参数 (maxDepth, maxNodes)
+
+        loop 迭代遍历
+            alt 栈不为空 & 未达节点限制
+                Scanner->>Scanner: 从栈中弹出节点 {node, depth}
+
+                alt 节点有效 & 深度 <= maxDepth
+                    alt 元素节点
+                        Scanner->>ElementProcessor: processElementNode(node)
+
+                        ElementProcessor->>ElementProcessor: 检查是否已处理
+
+                        alt 已处理
+                            ElementProcessor-->>Scanner: 跳过
+                        else 未处理
+                            ElementProcessor->>ElementProcessor: 检查覆盖层特征
+
+                            alt 是覆盖层
+                                ElementProcessor->>ElementProcessor: 隐藏覆盖层
+                                ElementProcessor-->>Scanner: 已处理
+                            else 非覆盖层
+                                ElementProcessor->>ElementProcessor: 检查水印内容
+
+                                alt 包含水印
+                                    ElementProcessor->>ElementProcessor: 移除水印
+                                    ElementProcessor-->>Scanner: 已处理
+                                else 不包含水印
+                                    Scanner->>ChildProcessor: processChildNodes(node, stack, depth)
+                                    ChildProcessor-->>Scanner: 子节点已压入栈
+                                end
+                            end
+                        end
+
+                        Scanner->>ShadowProcessor: processShadowRoot(node, stack, depth)
+                        ShadowProcessor-->>Scanner: Shadow Root 已压入栈
+                    else 文本节点
+                        Scanner->>Scanner: 检查文本内容
+
+                        alt 包含水印
+                            Scanner->>Scanner: 移除文本节点
+                        end
+                    end
+                else 节点无效或超深
+                    Scanner->>Scanner: 跳过
+                end
+            else 达到节点限制
+                Scanner->>LimitChecker: checkProcessingLimit(processedNodes, maxNodes)
+                LimitChecker->>Logger: 记录警告
+                LimitChecker-->>Scanner: 停止遍历
+            end
+        end
+
+        Scanner-->>Main: 遍历完成
+    end
+```
+
+## 16. 精细缓存清理时序图
+
+```mermaid
+sequenceDiagram
+    participant Observer as MutationObserver
+    participant NodeCollector as 节点收集器
+    participant CacheCleaner as 缓存清理器
+    participant StyleCache as 样式缓存
+    participant Scanner as 扫描器
+
+    loop DOM 变化监听
+        DOM->>Observer: 触发 MutationEvent
+
+        Observer->>NodeCollector: 收集变更节点
+
+        alt childList 变化
+            NodeCollector->>NodeCollector: 收集新增节点
+            NodeCollector->>CacheCleaner: clearStyleCacheForNode(nodes, 'childList')
+        else attribute 变化
+            NodeCollector->>NodeCollector: 收集变化目标
+            NodeCollector->>CacheCleaner: clearStyleCacheForNode(targets, 'attribute')
+        end
+
+        CacheCleaner->>CacheCleaner: 判断 mutationType
+
+        alt mutationType = 'attribute'
+            CacheCleaner->>StyleCache: 只清除当前节点的缓存
+            StyleCache-->>CacheCleaner: 缓存已清除
+        else mutationType = 'childList'
+            CacheCleaner->>StyleCache: 清除当前节点和新子节点的缓存
+            StyleCache-->>CacheCleaner: 缓存已清除
+        else mutationType = 'default'
+            CacheCleaner->>StyleCache: 清除当前节点及其所有子节点的缓存
+            CacheCleaner->>StyleCache: 清除 Shadow Root 中的缓存
+            StyleCache-->>CacheCleaner: 缓存已清除
+        end
+
+        CacheCleaner->>Scanner: 执行局部扫描
+        Scanner->>StyleCache: 获取缓存的样式
+        StyleCache-->>Scanner: 样式数据
+        Scanner->>Scanner: 检测并移除水印
+    end
+
+    Note over Observer,Scanner: 精细的缓存清理策略减少不必要的样式重新计算，提升性能
+```
 
 这些时序图全面展示了 Xiaomi MiMo Studio 去水印脚本的组件交互和执行流程。

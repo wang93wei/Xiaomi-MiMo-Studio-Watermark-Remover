@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.3.6
+// @version      1.3.7
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -51,6 +51,14 @@
         ENABLE_CANVAS_INTERCEPT: true,   // 启用 Canvas 拦截
         ENABLE_CSS_INTERCEPT: false,     // 启用 CSS 拦截（默认关闭，可能影响页面功能）
         ENABLE_APPEND_CHILD_INTERCEPT: false,  // 启用 appendChild 拦截（默认关闭，可能影响页面功能）
+
+        // 水印检测阈值配置
+        VIEWPORT_COVERAGE_THRESHOLD: 0.9,  // 视口覆盖阈值（90%），用于判断元素是否覆盖大部分视口
+        BASE64_MATCH_MAX_LENGTH: 50,      // Base64 匹配长度上限，用于从页面检测水印
+        PAGE_LOAD_WAIT_TIME: 2000,        // 页面加载后等待时间（毫秒）
+
+        // 性能优化配置
+        USE_TREE_WALKER: false,           // 使用 TreeWalker API 进行 DOM 遍历（实验性功能）
     };
 
     // 错误统计
@@ -100,6 +108,9 @@
     // 样式缓存，避免频繁调用 getComputedStyle
     const styleCache = new WeakMap();
 
+    // 正则表达式缓存，避免重复编译
+    const watermarkRegexCache = new Map();
+
     // 获取缓存的样式
     function getCachedStyle(element) {
         if (!element) return null;
@@ -118,6 +129,47 @@
             return null;
         }
     }
+
+    // 精细的样式缓存清理函数
+    function clearStyleCacheForNode(node, mutationType = 'default') {
+        if (!node) return;
+
+        switch (mutationType) {
+            case 'attribute':
+                // 属性变化：只清除当前节点的缓存
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    styleCache.delete(node);
+                }
+                break;
+
+            case 'childList':
+                // 子节点添加：清除当前节点和新子节点的缓存
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    styleCache.delete(node);
+                }
+                if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                    const children = node.querySelectorAll ? node.querySelectorAll('*') : [];
+                    children.forEach(el => styleCache.delete(el));
+                }
+                break;
+
+            default:
+                // 默认：清除当前节点及其所有子节点的缓存
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    styleCache.delete(node);
+                    const children = node.querySelectorAll ? node.querySelectorAll('*') : [];
+                    children.forEach(el => styleCache.delete(el));
+                    if (node.shadowRoot) {
+                        const shadowChildren = node.shadowRoot.querySelectorAll ? node.shadowRoot.querySelectorAll('*') : [];
+                        shadowChildren.forEach(el => styleCache.delete(el));
+                    }
+                } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                    const fragmentChildren = node.querySelectorAll ? node.querySelectorAll('*') : [];
+                    fragmentChildren.forEach(el => styleCache.delete(el));
+                }
+                break;
+        }
+    }
     
     // 防抖函数
     function debounce(func, wait) {
@@ -130,6 +182,116 @@
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
         };
+    }
+
+    // 获取缓存的水印正则表达式
+    function getWatermarkRegex(watermarkText) {
+        if (!watermarkText || typeof watermarkText !== 'string') return null;
+
+        if (watermarkRegexCache.has(watermarkText)) {
+            return watermarkRegexCache.get(watermarkText);
+        }
+
+        try {
+            const escaped = watermarkText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escaped, 'g');
+            watermarkRegexCache.set(watermarkText, regex);
+            return regex;
+        } catch (e) {
+            logger.warn('创建正则表达式失败:', e);
+            return null;
+        }
+    }
+
+    // 格式化错误上下文信息
+    function formatErrorContext(error, additionalContext = {}) {
+        return {
+            error: error.message,
+            stack: error.stack,
+            timestamp: new Date().toISOString(),
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+            ...additionalContext
+        };
+    }
+
+    // 验证配置对象
+    function validateConfig(config) {
+        const errors = [];
+
+        // 验证 DOM 遍历配置
+        if (config.MAX_DEPTH < 1 || config.MAX_DEPTH > 20) {
+            errors.push('MAX_DEPTH must be between 1 and 20');
+        }
+        if (config.MAX_NODES < 100 || config.MAX_NODES > 100000) {
+            errors.push('MAX_NODES must be between 100 and 100000');
+        }
+
+        // 验证轮询配置
+        if (config.MAX_POLL_COUNT < 1 || config.MAX_POLL_COUNT > 100) {
+            errors.push('MAX_POLL_COUNT must be between 1 and 100');
+        }
+        if (config.POLL_INTERVAL < 100 || config.POLL_INTERVAL > 10000) {
+            errors.push('POLL_INTERVAL must be between 100 and 10000');
+        }
+
+        // 验证重试配置
+        if (config.MAX_RETRIES < 0 || config.MAX_RETRIES > 10) {
+            errors.push('MAX_RETRIES must be between 0 and 10');
+        }
+        if (config.RETRY_DELAY < 100 || config.RETRY_DELAY > 60000) {
+            errors.push('RETRY_DELAY must be between 100 and 60000');
+        }
+        if (config.RETRY_BACKOFF < 1 || config.RETRY_BACKOFF > 3) {
+            errors.push('RETRY_BACKOFF must be between 1 and 3');
+        }
+
+        // 验证超时配置
+        if (config.FETCH_TIMEOUT < 1000 || config.FETCH_TIMEOUT > 60000) {
+            errors.push('FETCH_TIMEOUT must be between 1000 and 60000');
+        }
+        if (config.REGEX_TIMEOUT < 10 || config.REGEX_TIMEOUT > 10000) {
+            errors.push('REGEX_TIMEOUT must be between 10 and 10000');
+        }
+
+        // 验证水印文本限制
+        if (config.MAX_WATERMARK_LENGTH < 1 || config.MAX_WATERMARK_LENGTH > 10000) {
+            errors.push('MAX_WATERMARK_LENGTH must be between 1 and 10000');
+        }
+        if (config.MIN_WATERMARK_LENGTH < 1 || config.MIN_WATERMARK_LENGTH > config.MAX_WATERMARK_LENGTH) {
+            errors.push('MIN_WATERMARK_LENGTH must be between 1 and MAX_WATERMARK_LENGTH');
+        }
+
+        // 验证防抖配置
+        if (config.OBSERVER_DEBOUNCE < 10 || config.OBSERVER_DEBOUNCE > 1000) {
+            errors.push('OBSERVER_DEBOUNCE must be between 10 and 1000');
+        }
+        if (config.RESIZE_DEBOUNCE < 100 || config.RESIZE_DEBOUNCE > 5000) {
+            errors.push('RESIZE_DEBOUNCE must be between 100 and 5000');
+        }
+
+        // 验证水印检测阈值配置
+        if (config.VIEWPORT_COVERAGE_THRESHOLD < 0.5 || config.VIEWPORT_COVERAGE_THRESHOLD > 1) {
+            errors.push('VIEWPORT_COVERAGE_THRESHOLD must be between 0.5 and 1');
+        }
+        if (config.BASE64_MATCH_MAX_LENGTH < 10 || config.BASE64_MATCH_MAX_LENGTH > 1000) {
+            errors.push('BASE64_MATCH_MAX_LENGTH must be between 10 and 1000');
+        }
+        if (config.PAGE_LOAD_WAIT_TIME < 1000 || config.PAGE_LOAD_WAIT_TIME > 10000) {
+            errors.push('PAGE_LOAD_WAIT_TIME must be between 1000 and 10000');
+        }
+
+        // 验证性能优化配置
+        if (typeof config.USE_TREE_WALKER !== 'boolean') {
+            errors.push('USE_TREE_WALKER must be a boolean');
+        }
+
+        if (errors.length > 0) {
+            logger.error('配置验证失败:', errors);
+            throw new Error('Invalid configuration: ' + errors.join(', '));
+        }
+
+        logger.log('配置验证通过');
     }
 
     // 检查文本内容是否包含水印
@@ -262,7 +424,7 @@
         return bgImage && bgImage !== 'none';
     }
 
-    // 检查元素是否覆盖大部分视口（>= 90%）
+    // 检查元素是否覆盖大部分视口
     function coversMostViewport(element) {
         let rect;
         try {
@@ -284,7 +446,8 @@
         const docHeight = useDocHeight ? document.documentElement.scrollHeight : vh;
 
         return (docWidth > 0 && docHeight > 0) &&
-               (rect.width >= docWidth * 0.9 && rect.height >= docHeight * 0.9);
+               (rect.width >= docWidth * CONFIG.VIEWPORT_COVERAGE_THRESHOLD && 
+                rect.height >= docHeight * CONFIG.VIEWPORT_COVERAGE_THRESHOLD);
     }
 
     // 主函数：检查元素是否可能是水印覆盖层
@@ -320,16 +483,149 @@
         }
     }
 
+    // 初始化遍历栈
+    function initializeTraversalStack(root) {
+        return [{ node: root, depth: 0 }];
+    }
+
+    // 处理单个元素节点
+    function processElementNode(node) {
+        if (processedElements.has(node)) return false;
+
+        // 优先检测并隐藏水印覆盖层
+        if (isLikelyWatermarkOverlay(node)) {
+            hideOverlayElement(node);
+            return true;
+        }
+
+        // 检查当前节点是否包含水印文本或图片
+        if (WATERMARK_TEXT && (elementContainsWatermark(node) || imageContainsWatermark(node))) {
+            removeWatermark(node);
+            return true;
+        }
+
+        return false;
+    }
+
+    // 处理子节点
+    function processChildNodes(node, stack, depth) {
+        if (!node.childNodes || !node.childNodes.length) return;
+
+        // 反向遍历，保持处理顺序
+        for (let i = node.childNodes.length - 1; i >= 0; i--) {
+            const child = node.childNodes[i];
+            if (child.nodeType === Node.TEXT_NODE) {
+                // 检查并移除文本节点中的水印
+                const textContent = child.textContent || '';
+                if (WATERMARK_TEXT && containsWatermark(textContent)) {
+                    child.remove();
+                }
+            } else if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                stack.push({ node: child, depth: depth + 1 });
+            }
+        }
+    }
+
+    // 处理 Shadow Root
+    function processShadowRoot(node, stack, depth) {
+        if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
+            stack.push({ node: node.shadowRoot, depth: depth + 1 });
+        }
+    }
+
+    // 检查处理限制
+    function checkProcessingLimit(processedNodes, maxNodes) {
+        if (processedNodes >= maxNodes) {
+            logger.warn('已达到最大节点处理限制，停止遍历');
+            return false;
+        }
+        return true;
+    }
+
+    // 使用 TreeWalker API 进行水印检测（性能优化版本）
+    function detectAndRemoveWatermarksWithTreeWalker(root = document.body, maxNodes = CONFIG.MAX_NODES) {
+        if (!root) return;
+
+        let processedNodes = 0;
+
+        try {
+            const walker = document.createTreeWalker(
+                root,
+                NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT | NodeFilter.SHOW_DOCUMENT_FRAGMENT,
+                {
+                    acceptNode: (node) => {
+                        if (processedNodes >= maxNodes) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+
+            let node;
+            while ((node = walker.nextNode()) && processedNodes < maxNodes) {
+                processedNodes++;
+
+                try {
+                    // 处理元素节点
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        if (processedElements.has(node)) continue;
+
+                        // 优先检测并隐藏水印覆盖层
+                        if (isLikelyWatermarkOverlay(node)) {
+                            hideOverlayElement(node);
+                            continue;
+                        }
+
+                        // 检查当前节点是否包含水印文本或图片
+                        if (WATERMARK_TEXT && (elementContainsWatermark(node) || imageContainsWatermark(node))) {
+                            removeWatermark(node);
+                            continue;
+                        }
+                    }
+
+                    // 处理文本节点
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const textContent = node.textContent || '';
+                        if (WATERMARK_TEXT && containsWatermark(textContent)) {
+                            node.remove();
+                        }
+                    }
+
+                    // 处理 Document Fragment (如 Shadow Root)
+                    // 注意：TreeWalker 会自动遍历 Shadow Root，不需要递归调用
+                } catch (e) {
+                    logger.warn('检测水印时出错:', formatErrorContext(e, {
+                        nodeType: node?.nodeType,
+                        tagName: node?.tagName
+                    }));
+                }
+            }
+
+            checkProcessingLimit(processedNodes, maxNodes);
+        } catch (e) {
+            logger.error('TreeWalker 遍历失败，回退到普通遍历:', e);
+            // 回退到普通遍历
+            detectAndRemoveWatermarks(root);
+        }
+    }
+
     // 统一的水印检测和移除函数
     function detectAndRemoveWatermarks(root = document.body) {
         if (!root) return;
+
+        // 根据配置选择遍历方式
+        if (CONFIG.USE_TREE_WALKER) {
+            detectAndRemoveWatermarksWithTreeWalker(root);
+            return;
+        }
 
         const maxDepth = CONFIG.MAX_DEPTH;
         const maxNodes = CONFIG.MAX_NODES;
         let processedNodes = 0;
 
         // 使用迭代代替递归，防止调用栈溢出
-        const stack = [{ node: root, depth: 0 }];
+        const stack = initializeTraversalStack(root);
 
         while (stack.length > 0 && processedNodes < maxNodes) {
             const { node, depth } = stack.pop();
@@ -341,51 +637,25 @@
             try {
                 // 处理元素节点
                 if (node.nodeType === Node.ELEMENT_NODE) {
-                    // 如果该节点已经处理过则直接跳过
-                    if (processedElements.has(node)) continue;
-
-                    // 优先检测并隐藏水印覆盖层
-                    if (isLikelyWatermarkOverlay(node)) {
-                        hideOverlayElement(node);
-                        continue;
-                    }
-
-                    // 检查当前节点是否包含水印文本或图片
-                    if (WATERMARK_TEXT && (elementContainsWatermark(node) || imageContainsWatermark(node))) {
-                        removeWatermark(node);
-                        continue;
-                    }
+                    const handled = processElementNode(node);
+                    if (handled) continue;
                 }
 
-                // 遍历子节点（使用栈而非递归）
-                if (node.childNodes && node.childNodes.length) {
-                    // 反向遍历，保持处理顺序
-                    for (let i = node.childNodes.length - 1; i >= 0; i--) {
-                        const child = node.childNodes[i];
-                        if (child.nodeType === Node.TEXT_NODE) {
-                            // 检查并移除文本节点中的水印
-                            const textContent = child.textContent || '';
-                            if (WATERMARK_TEXT && containsWatermark(textContent)) {
-                                child.remove();
-                            }
-                        } else if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                            stack.push({ node: child, depth: depth + 1 });
-                        }
-                    }
-                }
+                // 遍历子节点
+                processChildNodes(node, stack, depth);
 
                 // 处理 Shadow Root
-                if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
-                    stack.push({ node: node.shadowRoot, depth: depth + 1 });
-                }
+                processShadowRoot(node, stack, depth);
             } catch (e) {
-                logger.warn('检测水印时出错:', e);
+                logger.warn('检测水印时出错:', formatErrorContext(e, {
+                    nodeType: node?.nodeType,
+                    tagName: node?.tagName,
+                    depth: depth
+                }));
             }
         }
 
-        if (processedNodes >= maxNodes) {
-            logger.warn('已达到最大节点处理限制，停止遍历');
-        }
+        checkProcessingLimit(processedNodes, maxNodes);
     }
 
     // 检查元素是否包含水印文本
@@ -479,8 +749,11 @@
                 // 使用更安全的正则表达式转义，并添加安全验证
                 if (WATERMARK_TEXT && isSafeWatermarkText(WATERMARK_TEXT)) {
                     try {
-                        const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const watermarkRegex = new RegExp(escapedWatermark, 'g');
+                        const watermarkRegex = getWatermarkRegex(WATERMARK_TEXT);
+                        if (!watermarkRegex) {
+                            logger.warn('无法获取水印正则表达式，跳过');
+                            return;
+                        }
 
                         // 添加超时保护，在整个操作前后检查
                         const startTime = Date.now();
@@ -521,7 +794,10 @@
                 }
             }
         } catch (e) {
-            logger.warn('移除水印时出错:', e);
+            logger.warn('移除水印时出错:', formatErrorContext(e, {
+                tagName: element?.tagName,
+                hasWatermarkText: !!WATERMARK_TEXT
+            }));
         }
     }
 
@@ -542,27 +818,13 @@
 
     // 创建 MutationObserver 监听 DOM 变化（仅处理发生变化的局部节点，降低 CPU 占用）
     function setupObserver() {
-        const scheduleLocalScan = debounce((nodes) => {
+        const scheduleLocalScan = debounce((nodes, mutationType = 'default') => {
             try {
                 nodes.forEach((node) => {
                     if (!node) return;
 
-                    // 清除相关元素的样式缓存
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        styleCache.delete(node);
-                        // 清除所有子元素的缓存
-                        const children = node.querySelectorAll ? node.querySelectorAll('*') : [];
-                        children.forEach(el => styleCache.delete(el));
-                        // 清除 Shadow Root 中的元素缓存
-                        if (node.shadowRoot) {
-                            const shadowChildren = node.shadowRoot.querySelectorAll ? node.shadowRoot.querySelectorAll('*') : [];
-                            shadowChildren.forEach(el => styleCache.delete(el));
-                        }
-                    } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                        // 清除 Document Fragment（如 Shadow Root）中的所有元素缓存
-                        const fragmentChildren = node.querySelectorAll ? node.querySelectorAll('*') : [];
-                        fragmentChildren.forEach(el => styleCache.delete(el));
-                    }
+                    // 使用精细的缓存清理策略
+                    clearStyleCacheForNode(node, mutationType);
 
                     if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
                         detectAndRemoveWatermarks(node);
@@ -574,22 +836,34 @@
         }, CONFIG.OBSERVER_DEBOUNCE);
 
         const observer = new MutationObserver((mutations) => {
-            const nodesToScan = [];
+            const nodesToScan = { childList: [], attribute: [] };
+
             mutations.forEach((mutation) => {
                 if (mutation.type === 'childList' && mutation.addedNodes && mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach((node) => nodesToScan.push(node));
+                    // 子节点添加，使用 childList 策略清理缓存
+                    const addedNodes = Array.from(mutation.addedNodes);
+                    nodesToScan.childList.push(...addedNodes);
                 }
 
                 if (mutation.type === 'attributes') {
                     const attrName = mutation.attributeName;
                     // 监听 style、src、class 属性变化
                     if (attrName === 'style' || attrName === 'src' || attrName === 'class') {
-                        if (mutation.target) nodesToScan.push(mutation.target);
+                        if (mutation.target) {
+                            // 属性变化，使用 attribute 策略清理缓存
+                            nodesToScan.attribute.push(mutation.target);
+                        }
                     }
                 }
             });
 
-            if (nodesToScan.length > 0) scheduleLocalScan(nodesToScan);
+            // 分别处理不同类型的节点
+            if (nodesToScan.childList.length > 0) {
+                scheduleLocalScan(nodesToScan.childList, 'childList');
+            }
+            if (nodesToScan.attribute.length > 0) {
+                scheduleLocalScan(nodesToScan.attribute, 'attribute');
+            }
         });
 
         // 配置观察选项
@@ -770,7 +1044,7 @@
         }
     }
 
-    function clearLikelyWatermarkCanvases() {
+    function clearSuspectedWatermarkCanvases() {
         const canvases = document.querySelectorAll('canvas');
         if (!canvases || canvases.length === 0) return;
 
@@ -787,7 +1061,9 @@
                 const rect = canvas.getBoundingClientRect();
                 const vw = window.innerWidth || 0;
                 const vh = window.innerHeight || 0;
-                const coversMostViewport = vw > 0 && vh > 0 && rect.width >= vw * 0.9 && rect.height >= vh * 0.9;
+                const coversMostViewport = vw > 0 && vh > 0 && 
+                    rect.width >= vw * CONFIG.VIEWPORT_COVERAGE_THRESHOLD && 
+                    rect.height >= vh * CONFIG.VIEWPORT_COVERAGE_THRESHOLD;
 
                 if (coversMostViewport && (positionLikely || pointerEventsNone)) {
                     const ctx2d = canvas.getContext('2d');
@@ -871,9 +1147,10 @@
                             if (child.textContent && containsWatermark(child.textContent)) {
                                 // 添加长度限制，避免处理过长的水印文本
                                 if (WATERMARK_TEXT.length < CONFIG.MAX_WATERMARK_LENGTH) {
-                                    const escapedWatermark = WATERMARK_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                                    const watermarkRegex = new RegExp(escapedWatermark, 'g');
-                                    child.textContent = child.textContent.replace(watermarkRegex, '');
+                                    const watermarkRegex = getWatermarkRegex(WATERMARK_TEXT);
+                                    if (watermarkRegex) {
+                                        child.textContent = child.textContent.replace(watermarkRegex, '');
+                                    }
                                 }
                             }
                         }
@@ -988,7 +1265,7 @@
             logger.log('成功获取水印内容:', WATERMARK_TEXT);
             return true;
         } catch (error) {
-            logger.error('获取水印内容时发生未知错误:', error);
+            logger.error('获取水印内容时发生未知错误:', formatErrorContext(error));
             logger.stat('fetchErrors');
             return false;
         }
@@ -1009,7 +1286,8 @@
 
             if (matches && matches.length > 0) {
                 for (let match of matches) {
-                    if (match.length >= CONFIG.MIN_WATERMARK_LENGTH && match.length <= 50) {
+                    if (match.length >= CONFIG.MIN_WATERMARK_LENGTH && 
+                        match.length <= CONFIG.BASE64_MATCH_MAX_LENGTH) {
                         const walker = document.createTreeWalker(
                             document.body,
                             NodeFilter.SHOW_TEXT,
@@ -1032,7 +1310,7 @@
 
             return false;
         } catch (error) {
-            logger.error('从页面检测水印时出错:', error);
+            logger.error('从页面检测水印时出错:', formatErrorContext(error));
             return false;
         }
     }
@@ -1096,7 +1374,7 @@
             interceptStyles();
             setupObserver();
             detectAndRemoveWatermarks();
-            clearLikelyWatermarkCanvases();
+            clearSuspectedWatermarkCanvases();
         } catch (error) {
             logger.error('启动水印移除功能时出错:', error);
             return false;
@@ -1119,14 +1397,14 @@
                 return;
             }
             detectAndRemoveWatermarks();
-            clearLikelyWatermarkCanvases();
+            clearSuspectedWatermarkCanvases();
         }, pollInterval);
 
         // 监听窗口 resize 事件，确保布局变化时重新检测
         resizeHandler = debounce(() => {
             logger.log('窗口大小改变，重新检测水印');
             detectAndRemoveWatermarks();
-            clearLikelyWatermarkCanvases();
+            clearSuspectedWatermarkCanvases();
         }, CONFIG.RESIZE_DEBOUNCE);
         window.addEventListener('resize', resizeHandler);
 
@@ -1136,6 +1414,14 @@
     // 主函数
     async function main() {
         logger.log('脚本开始运行...');
+
+        // 验证配置
+        try {
+            validateConfig(CONFIG);
+        } catch (e) {
+            logger.error('配置验证失败，脚本无法启动:', e);
+            return;
+        }
 
         // 首先尝试获取水印内容（带重试）
         const watermarkFetched = await fetchWatermarkWithRetry(CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY);
@@ -1147,7 +1433,7 @@
             // 如果仍然失败，等待页面完全加载后再试一次
             logger.log('等待页面完全加载后重试...');
             window.addEventListener('load', async () => {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 再等待 2 秒
+                await new Promise(resolve => setTimeout(resolve, CONFIG.PAGE_LOAD_WAIT_TIME));
                 const retrySuccess = await fetchWatermarkWithRetry(3, CONFIG.RETRY_DELAY * 2);
                 if (retrySuccess && WATERMARK_TEXT) {
                     startWatermarkRemoval();

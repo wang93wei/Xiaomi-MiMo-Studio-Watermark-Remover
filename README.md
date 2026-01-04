@@ -94,9 +94,41 @@ The script supports the following configuration options (modify at the beginning
 const ENABLE_LOG = false;
 ```
 
+### Core Configuration Options
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `ENABLE_LOG` | Boolean | `false` | Controls whether to output debug logs, `true` to enable, `false` to disable |
+| `MAX_DEPTH` | Number | `12` | Maximum traversal depth to prevent stack overflow |
+| `MAX_NODES` | Number | `10000` | Maximum number of nodes to process for performance |
+| `MAX_POLL_COUNT` | Number | `20` | Maximum number of polling attempts |
+| `POLL_INTERVAL` | Number | `500` | Polling interval in milliseconds |
+| `MAX_RETRIES` | Number | `5` | Maximum retry attempts for API requests |
+| `RETRY_DELAY` | Number | `1000` | Initial retry delay in milliseconds |
+| `RETRY_BACKOFF` | Number | `1.5` | Retry backoff multiplier |
+| `FETCH_TIMEOUT` | Number | `10000` | API request timeout in milliseconds |
+| `REGEX_TIMEOUT` | Number | `100` | Regex replacement timeout in milliseconds |
+| `MAX_WATERMARK_LENGTH` | Number | `500` | Maximum watermark text length |
+| `MIN_WATERMARK_LENGTH` | Number | `1` | Minimum watermark text length |
+| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver debounce delay in milliseconds |
+| `RESIZE_DEBOUNCE` | Number | `300` | Resize event debounce delay in milliseconds |
+
+### Interception Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | Enable Canvas API interception |
+| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | Enable CSS style interception (disabled by default) |
+| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | Enable appendChild interception (disabled by default) |
+
+### Performance Optimization Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | Viewport coverage threshold (90%) for overlay detection |
+| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 match length limit for watermark detection |
+| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | Page load wait time in milliseconds |
+| `USE_TREE_WALKER` | Boolean | `false` | Use TreeWalker API for DOM traversal (experimental) |
 
 ### Enabling Logs for Debugging
 
@@ -112,6 +144,22 @@ After enabling, the browser console (F12) will output detailed log information, 
 - DOM change monitoring
 - Canvas interception records
 - Error and warning information
+
+### Performance Optimization Options
+
+For advanced users, the following options can be tuned for better performance:
+
+1. **TreeWalker API**: Set `USE_TREE_WALKER` to `true` to use TreeWalker API for DOM traversal (may improve performance on large pages)
+2. **Debounce Settings**: Adjust `OBSERVER_DEBOUNCE` and `RESIZE_DEBOUNCE` to balance responsiveness and performance
+3. **Node Limits**: Adjust `MAX_NODES` and `MAX_DEPTH` based on page complexity
+
+### Interception Control
+
+The script provides fine-grained control over prototype chain modifications:
+
+- **Canvas Interception**: Enabled by default, intercepts Canvas drawing operations
+- **CSS Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
+- **appendChild Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
 
 ## 🔬 How It Works
 
@@ -315,6 +363,23 @@ When encountering problems, please provide:
 - Tampermonkey extension
 
 ## 📝 Version History
+
+### v1.3.7 (2026-01-05)
+- **Code Quality Improvements**:
+  - Refactored `detectAndRemoveWatermarks` function into 6 sub-functions for better maintainability
+  - Extracted magic numbers to CONFIG object (VIEWPORT_COVERAGE_THRESHOLD, BASE64_MATCH_MAX_LENGTH, PAGE_LOAD_WAIT_TIME)
+  - Added regex expression caching to avoid repeated compilation
+  - Enhanced error logging with context information (error, stack, timestamp, URL, user agent)
+  - Added configuration validation function to prevent configuration errors
+  - Renamed `clearLikelyWatermarkCanvases` to `clearSuspectedWatermarkCanvases` for better semantics
+- **Performance Optimizations**:
+  - Implemented TreeWalker API option for DOM traversal (experimental feature)
+  - Optimized style cache invalidation strategy with fine-grained clearing (attribute, childList, default)
+  - Improved debounce logic in MutationObserver to ensure performance optimization
+- **Bug Fixes**:
+  - Fixed debounce logic issue that caused frequent scanning
+  - Fixed configuration validation to include all new config items
+  - Fixed TreeWalker recursion issue that could cause node processing limit issues
 
 ### v1.3.6 (2026-01-04)
 - Code Refactoring: Fixed code formatting issues, unified indentation and blank lines
