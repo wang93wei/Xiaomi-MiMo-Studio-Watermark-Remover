@@ -369,6 +369,30 @@ console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
 
 ## 📝 版本历史
 
+### v1.3.8 (2026-01-07)
+- **安全修复**：
+  - 修复 XSS 安全漏洞，使用 innerHTML.replace() 处理水印文本
+  - 添加水印文本长度限制（100字符）和安全验证，防止 ReDoS 攻击
+  - 增强错误处理，添加 SecurityError 类型和详细错误上下文信息
+- **性能优化**：
+  - 优化样式缓存清理策略，减少不必要的 querySelectorAll 调用
+  - 实现智能轮询机制：前3次轮询总是执行检测，后续只在有 DOM 变化时执行
+  - 添加 mutationCount 全局变量，实现零开销的 DOM 变化检测
+- **内存管理**：
+  - 添加 globalObserver 引用和清理机制，防止内存泄漏
+  - 在页面卸载时自动清理 MutationObserver
+- **代码质量**：
+  - 消除魔法数字，提取 HIGH_ZINDEX_THRESHOLD 和 LOW_OPACITY_THRESHOLD 到 CONFIG
+  - 为关键函数添加详细的 JSDoc 注释（isLikelyWatermarkOverlay、removeWatermark）
+  - 改进日志配置，支持通过 localStorage 和 URL 参数动态控制
+- **Bug 修复**：
+  - 修复初始加载时水印无法去除的问题
+  - 修复样式缓存清理过度简化导致的检测不准确问题
+- **文档更新**：
+  - 更新 README，添加新配置项说明
+  - 添加智能轮询时序图
+  - 更新文档版本到 v1.3.8
+
 ### v1.3.7 (2026-01-05)
 - **代码质量改进**：
   - 将 `detectAndRemoveWatermarks` 函数重构为 6 个子函数，提高可维护性

@@ -369,6 +369,30 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
+### v1.3.8 (2026-01-07)
+- **Security Fixes**:
+  - Fixed XSS security vulnerability by using innerHTML.replace() for watermark text processing
+  - Added watermark text length limit (100 characters) and safety validation to prevent ReDoS attacks
+  - Enhanced error handling with SecurityError type and detailed error context information
+- **Performance Optimizations**:
+  - Optimized style cache cleanup strategy to reduce unnecessary querySelectorAll calls
+  - Implemented intelligent polling mechanism: first 3 polls always execute, subsequent polls only execute when DOM changes detected
+  - Added mutationCount global variable for zero-overhead DOM change detection
+- **Memory Management**:
+  - Added globalObserver reference and cleanup mechanism to prevent memory leaks
+  - Automatically cleanup MutationObserver on page unload
+- **Code Quality**:
+  - Eliminated magic numbers by extracting HIGH_ZINDEX_THRESHOLD and LOW_OPACITY_THRESHOLD to CONFIG
+  - Added detailed JSDoc comments for key functions (isLikelyWatermarkOverlay, removeWatermark)
+  - Improved log configuration to support dynamic control via localStorage and URL parameters
+- **Bug Fixes**:
+  - Fixed issue where watermarks were not removed on initial page load
+  - Fixed inaccurate watermark detection caused by over-simplified style cache cleanup
+- **Documentation Updates**:
+  - Updated README with new configuration items
+  - Added intelligent polling sequence diagram
+  - Updated documentation version to v1.3.8
+
 ### v1.3.7 (2026-01-05)
 - **Code Quality Improvements**:
   - Refactored `detectAndRemoveWatermarks` function into 6 sub-functions for better maintainability
