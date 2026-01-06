@@ -2,7 +2,7 @@
 
 A Tampermonkey userscript that automatically detects and removes watermarks from Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) pages.
 
-🇨🇳 [中文](./README_zh.md) | 🇺🇸 **English**
+🇨🇳 [中文](./doc/README_zh.md) | 🇺🇸 **English**
 
 ---
 
@@ -91,12 +91,49 @@ The script supports the following configuration options (modify at the beginning
 ```javascript
 // ========== Configuration Options ==========
 // Log switch (set to true to enable logs, false to disable)
+// Supports dynamic control via localStorage or URL parameters:
+// - localStorage: localStorage.setItem('watermark_debug', 'true')
+// - URL parameter: ?debug=true
 const ENABLE_LOG = false;
 ```
+
+### Core Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `ENABLE_LOG` | Boolean | `false` | Controls whether to output debug logs, `true` to enable, `false` to disable |
+| `MAX_DEPTH` | Number | `12` | Maximum traversal depth to prevent stack overflow |
+| `MAX_NODES` | Number | `10000` | Maximum number of nodes to process for performance |
+| `MAX_POLL_COUNT` | Number | `20` | Maximum number of polling attempts |
+| `POLL_INTERVAL` | Number | `500` | Polling interval in milliseconds |
+| `MAX_RETRIES` | Number | `5` | Maximum retry attempts for API requests |
+| `RETRY_DELAY` | Number | `1000` | Initial retry delay in milliseconds |
+| `RETRY_BACKOFF` | Number | `1.5` | Retry backoff multiplier |
+| `FETCH_TIMEOUT` | Number | `10000` | API request timeout in milliseconds |
+| `REGEX_TIMEOUT` | Number | `100` | Regex replacement timeout in milliseconds |
+| `MAX_WATERMARK_LENGTH` | Number | `500` | Maximum watermark text length |
+| `MIN_WATERMARK_LENGTH` | Number | `1` | Minimum watermark text length |
+| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver debounce delay in milliseconds |
+| `RESIZE_DEBOUNCE` | Number | `300` | Resize event debounce delay in milliseconds |
+
+### Interception Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | Enable Canvas API interception |
+| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | Enable CSS style interception (disabled by default) |
+| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | Enable appendChild interception (disabled by default) |
+
+### Performance Optimization Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | Viewport coverage threshold (90%) for overlay detection |
+| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 match length limit for watermark detection |
+| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | Page load wait time in milliseconds |
+| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | High z-index threshold for overlay detection |
+| `LOW_OPACITY_THRESHOLD` | Number | `1` | Low opacity threshold for overlay detection |
+| `USE_TREE_WALKER` | Boolean | `false` | Use TreeWalker API for DOM traversal (experimental) |
 
 ### Enabling Logs for Debugging
 
@@ -112,6 +149,22 @@ After enabling, the browser console (F12) will output detailed log information, 
 - DOM change monitoring
 - Canvas interception records
 - Error and warning information
+
+### Performance Optimization Options
+
+For advanced users, the following options can be tuned for better performance:
+
+1. **TreeWalker API**: Set `USE_TREE_WALKER` to `true` to use TreeWalker API for DOM traversal (may improve performance on large pages)
+2. **Debounce Settings**: Adjust `OBSERVER_DEBOUNCE` and `RESIZE_DEBOUNCE` to balance responsiveness and performance
+3. **Node Limits**: Adjust `MAX_NODES` and `MAX_DEPTH` based on page complexity
+
+### Interception Control
+
+The script provides fine-grained control over prototype chain modifications:
+
+- **Canvas Interception**: Enabled by default, intercepts Canvas drawing operations
+- **CSS Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
+- **appendChild Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
 
 ## 🔬 How It Works
 
@@ -316,6 +369,47 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
+### v1.3.8 (2026-01-07)
+- **Security Fixes**:
+  - Fixed XSS security vulnerability by using innerHTML.replace() for watermark text processing
+  - Added watermark text length limit (100 characters) and safety validation to prevent ReDoS attacks
+  - Enhanced error handling with SecurityError type and detailed error context information
+- **Performance Optimizations**:
+  - Optimized style cache cleanup strategy to reduce unnecessary querySelectorAll calls
+  - Implemented intelligent polling mechanism: first 3 polls always execute, subsequent polls only execute when DOM changes detected
+  - Added mutationCount global variable for zero-overhead DOM change detection
+- **Memory Management**:
+  - Added globalObserver reference and cleanup mechanism to prevent memory leaks
+  - Automatically cleanup MutationObserver on page unload
+- **Code Quality**:
+  - Eliminated magic numbers by extracting HIGH_ZINDEX_THRESHOLD and LOW_OPACITY_THRESHOLD to CONFIG
+  - Added detailed JSDoc comments for key functions (isLikelyWatermarkOverlay, removeWatermark)
+  - Improved log configuration to support dynamic control via localStorage and URL parameters
+- **Bug Fixes**:
+  - Fixed issue where watermarks were not removed on initial page load
+  - Fixed inaccurate watermark detection caused by over-simplified style cache cleanup
+- **Documentation Updates**:
+  - Updated README with new configuration items
+  - Added intelligent polling sequence diagram
+  - Updated documentation version to v1.3.8
+
+### v1.3.7 (2026-01-05)
+- **Code Quality Improvements**:
+  - Refactored `detectAndRemoveWatermarks` function into 6 sub-functions for better maintainability
+  - Extracted magic numbers to CONFIG object (VIEWPORT_COVERAGE_THRESHOLD, BASE64_MATCH_MAX_LENGTH, PAGE_LOAD_WAIT_TIME)
+  - Added regex expression caching to avoid repeated compilation
+  - Enhanced error logging with context information (error, stack, timestamp, URL, user agent)
+  - Added configuration validation function to prevent configuration errors
+  - Renamed `clearLikelyWatermarkCanvases` to `clearSuspectedWatermarkCanvases` for better semantics
+- **Performance Optimizations**:
+  - Implemented TreeWalker API option for DOM traversal (experimental feature)
+  - Optimized style cache invalidation strategy with fine-grained clearing (attribute, childList, default)
+  - Improved debounce logic in MutationObserver to ensure performance optimization
+- **Bug Fixes**:
+  - Fixed debounce logic issue that caused frequent scanning
+  - Fixed configuration validation to include all new config items
+  - Fixed TreeWalker recursion issue that could cause node processing limit issues
+
 ### v1.3.6 (2026-01-04)
 - Code Refactoring: Fixed code formatting issues, unified indentation and blank lines
 - Function Optimization: Standardized startWatermarkRemoval function definition, fixed scope issues
@@ -326,6 +420,17 @@ When encountering problems, please provide:
 - API Optimization: Simplified API request headers from 12 to 3, reducing risk of being identified as a crawler
 - Feature Added: Added configuration switches to control prototype chain modifications (ENABLE_CANVAS_INTERCEPT, ENABLE_CSS_INTERCEPT, ENABLE_APPEND_CHILD_INTERCEPT)
 - Documentation Updated: Updated sequence diagram documentation to reflect all code improvements
+
+### v1.3.5 (2025-12-30)
+- Security fix: Fixed memory leak risk by adding cleanup mechanism for timers and event listeners
+- Security fix: Fixed prototype pollution risk by using Object.defineProperty to reduce impact on third-party code
+- Security fix: Fixed recursion depth issue by converting recursion to iteration and adding node count limits
+- Performance: Added style caching mechanism to reduce getComputedStyle calls
+- Security fix: Fixed regex DoS risk by adding safety validation and timeout protection
+- Code improvement: Added configuration constants object to centrally manage all configuration parameters
+- Error handling: Enhanced network error handling and API response validation
+- Edge cases: Improved handling for zero viewport size and proper handling of zIndex as 'auto'
+- Input validation: Added input validation for critical functions to prevent issues from invalid inputs
 
 ### v1.3.4 (2025-12-29)
 - Fix: Fixed watermark detection timing issue by changing @run-at from document-start to document-end

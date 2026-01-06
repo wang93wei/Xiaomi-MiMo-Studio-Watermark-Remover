@@ -1,486 +1,486 @@
-# Xiaomi MiMo Studio Watermark Remover
+# Xiaomi MiMo Studio 去水印脚本
 
-A Tampermonkey userscript that automatically detects and removes watermarks from Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) pages.
-
-🇨🇳 [中文](./doc/README_zh.md) | 🇺🇸 **English**
+🇨🇳 **中文** | 🇺🇸 [English](./doc/README_en.md)
 
 ---
 
-## 📋 Table of Contents
+一个用于自动检测并移除 Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) 页面中水印的 Tampermonkey 用户脚本。
 
-- [Features](#features)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [How It Works](#how-it-works)
-  - [Fetching Watermark Content](#1-fetching-watermark-content)
-  - [Detecting Watermarks](#2-detecting-watermarks)
-  - [Removing Watermarks](#3-removing-watermarks)
-  - [Dynamic Monitoring](#4-dynamic-monitoring)
-- [Technical Implementation](#technical-implementation)
-  - [Core Architecture](#core-architecture)
-  - [Performance Optimization Strategies](#performance-optimization-strategies)
-  - [Error Handling](#error-handling)
-- [FAQ](#faq)
-- [Troubleshooting](#troubleshooting)
-  - [Enable Debug Mode](#enable-debug-mode)
-  - [Check if Script is Running](#check-if-script-is-running)
-  - [Check Watermark Content](#check-watermark-content)
-  - [Reset Script State](#reset-script-state)
-  - [Report Issues](#report-issues)
-- [Compatibility](#compatibility)
-- [Version History](#version-history)
-- [Notes](#notes)
-- [License](#license)
-- [Contributing](#contributing)
-- [Related Links](#related-links)
+## 📋 目录
 
-## ✨ Features
+- [功能特性](#功能特性)
+- [安装方法](#安装方法)
+- [配置选项](#配置选项)
+- [工作原理](#工作原理)
+  - [获取水印内容](#1-获取水印内容)
+  - [检测水印](#2-检测水印)
+  - [移除水印](#3-移除水印)
+  - [动态监听](#4-动态监听)
+- [技术实现](#技术实现)
+  - [核心架构](#核心架构)
+  - [性能优化策略](#性能优化策略)
+  - [错误处理](#错误处理)
+- [常见问题](#常见问题)
+- [故障排除](#故障排除)
+  - [启用调试模式](#启用调试模式)
+  - [查看脚本是否运行](#查看脚本是否运行)
+  - [检查水印内容](#检查水印内容)
+  - [重置脚本状态](#重置脚本状态)
+  - [报告问题](#报告问题)
+- [兼容性](#兼容性)
+- [版本历史](#版本历史)
+- [注意事项](#注意事项)
+- [许可证](#许可证)
+- [贡献](#贡献)
+- [相关链接](#相关链接)
 
-- ✅ **Dynamic Watermark Detection**: Automatically fetches the current user's watermark content from the API, no manual configuration required
-- ✅ **Multiple Detection Methods**: Supports detection and removal of watermarks in various forms including text, images, Canvas, and CSS
-- ✅ **Real-time Monitoring**: Uses MutationObserver to monitor DOM changes and automatically detects and removes dynamically added watermarks
-- ✅ **Performance Optimization**: Debouncing, element caching, detection depth limiting, and other optimizations
-- ✅ **Log Control**: Configurable log switch, disabled by default, can be enabled for debugging
-- ✅ **Exception Handling**: Complete error handling and logging for easy troubleshooting
-- ✅ **Zero Dependencies**: Pure native JavaScript implementation, no external dependencies
-- ✅ **Memory Optimization**: Uses WeakSet to prevent memory leaks
+## ✨ 功能特性
 
-## 🚀 Installation
+- ✅ **动态获取水印**：自动从 API 获取当前用户的水印内容，无需手动配置
+- ✅ **多种检测方式**：支持文本、图片、Canvas、CSS 等多种水印形式的检测和移除
+- ✅ **实时监听**：使用 MutationObserver 监听 DOM 变化，自动检测并移除动态添加的水印
+- ✅ **性能优化**：防抖机制、元素缓存、检测深度限制等优化措施
+- ✅ **日志控制**：可配置的日志开关，默认关闭，需要调试时可开启
+- ✅ **异常处理**：完善的错误处理和日志记录，便于问题排查
+- ✅ **零依赖**：纯原生 JavaScript 实现，无外部依赖
+- ✅ **内存优化**：使用 WeakSet 避免内存泄漏
 
-### 1. Install Tampermonkey
+## 🚀 安装方法
 
-First, you need to install the Tampermonkey browser extension:
+### 1. 安装 Tampermonkey
+
+首先需要安装 Tampermonkey 浏览器扩展：
 
 - **Chrome/Edge**: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
 - **Firefox**: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/tampermonkey/)
 - **Safari**: [App Store](https://apps.apple.com/app/tampermonkey/id1482490089)
 
-### 2. Install the Script
+### 2. 安装脚本
 
-Choose one of the following methods to install the script:
+选择以下任一方式安装脚本：
 
-#### Method 1: Install from Greasy Fork (Recommended)
+#### 方式一：从 Greasy Fork 安装（推荐）
 
-1. Visit the [Greasy Fork script page](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
-2. Click the "Install this script" button on the page
-3. Confirm the installation
+1. 访问 [Greasy Fork 脚本页面](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+2. 点击页面上的"安装此脚本"按钮
+3. 确认安装即可
 
-#### Method 2: Install from OpenUserJS
+#### 方式二：从 OpenUserJS 安装
 
-1. Visit the [OpenUserJS script page](https://openuserjs.org/scripts/AlanWang/Xiaomi_MiMo_Studio_%E5%8E%BB%E6%B0%B4%E5%8D%B0)
-2. Click the "Install" button on the page
-3. Confirm the installation
+1. 访问 [OpenUserJS 脚本页面](https://openuserjs.org/scripts/AlanWang/Xiaomi_MiMo_Studio_%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+2. 点击页面上的"Install"按钮
+3. 确认安装即可
 
-#### Method 3: Install directly from GitHub
+#### 方式三：从 GitHub 直接安装
 
-1. Visit the [GitHub Raw URL](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/raw/refs/heads/main/xiaomi-mimo-watermark-remover.user.js)
-2. Tampermonkey will automatically recognize and prompt for installation
-3. Click the "Install" button to confirm
+1. 访问 [GitHub Raw 地址](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/raw/refs/heads/main/xiaomi-mimo-watermark-remover.user.js)
+2. Tampermonkey 会自动识别并提示安装
+3. 点击"安装"按钮确认即可
 
-### 3. Verify Installation
+### 3. 验证安装
 
-After installation, visit [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/), and you should see:
+安装完成后，访问 [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)，你应该能看到：
 
-- Watermark text on the page has disappeared
-- Browser console (if logging is enabled) will display `[去水印脚本]` related log information
+- 页面上的水印文字已经消失
+- 浏览器控制台（如果开启了日志）会显示 `[去水印脚本]` 相关的日志信息
 
-## ⚙️ Configuration
+## ⚙️ 配置选项
 
-The script supports the following configuration options (modify at the beginning of the script):
+脚本支持以下配置选项（在脚本开头修改）：
 
 ```javascript
-// ========== Configuration Options ==========
-// Log switch (set to true to enable logs, false to disable)
-// Supports dynamic control via localStorage or URL parameters:
+// ========== 配置选项 ==========
+// 日志开关（设置为 true 启用日志，false 关闭日志）
+// 支持通过 localStorage 或 URL 参数动态控制：
 // - localStorage: localStorage.setItem('watermark_debug', 'true')
-// - URL parameter: ?debug=true
+// - URL 参数: ?debug=true
 const ENABLE_LOG = false;
 ```
 
-### Core Configuration Options
+### 核心配置选项
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `ENABLE_LOG` | Boolean | `false` | Controls whether to output debug logs, `true` to enable, `false` to disable |
-| `MAX_DEPTH` | Number | `12` | Maximum traversal depth to prevent stack overflow |
-| `MAX_NODES` | Number | `10000` | Maximum number of nodes to process for performance |
-| `MAX_POLL_COUNT` | Number | `20` | Maximum number of polling attempts |
-| `POLL_INTERVAL` | Number | `500` | Polling interval in milliseconds |
-| `MAX_RETRIES` | Number | `5` | Maximum retry attempts for API requests |
-| `RETRY_DELAY` | Number | `1000` | Initial retry delay in milliseconds |
-| `RETRY_BACKOFF` | Number | `1.5` | Retry backoff multiplier |
-| `FETCH_TIMEOUT` | Number | `10000` | API request timeout in milliseconds |
-| `REGEX_TIMEOUT` | Number | `100` | Regex replacement timeout in milliseconds |
-| `MAX_WATERMARK_LENGTH` | Number | `500` | Maximum watermark text length |
-| `MIN_WATERMARK_LENGTH` | Number | `1` | Minimum watermark text length |
-| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver debounce delay in milliseconds |
-| `RESIZE_DEBOUNCE` | Number | `300` | Resize event debounce delay in milliseconds |
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `ENABLE_LOG` | Boolean | `false` | 控制是否输出调试日志，`true` 启用，`false` 关闭 |
+| `MAX_DEPTH` | Number | `12` | 最大遍历深度，防止调用栈溢出 |
+| `MAX_NODES` | Number | `10000` | 最大处理节点数，防止性能问题 |
+| `MAX_POLL_COUNT` | Number | `20` | 最大轮询次数 |
+| `POLL_INTERVAL` | Number | `500` | 轮询间隔（毫秒） |
+| `MAX_RETRIES` | Number | `5` | API 请求最大重试次数 |
+| `RETRY_DELAY` | Number | `1000` | 初始重试延迟（毫秒） |
+| `RETRY_BACKOFF` | Number | `1.5` | 重试退避倍数 |
+| `FETCH_TIMEOUT` | Number | `10000` | API 请求超时（毫秒） |
+| `REGEX_TIMEOUT` | Number | `100` | 正则替换超时（毫秒） |
+| `MAX_WATERMARK_LENGTH` | Number | `500` | 水印文本最大长度 |
+| `MIN_WATERMARK_LENGTH` | Number | `1` | 水印文本最小长度 |
+| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver 防抖延迟（毫秒） |
+| `RESIZE_DEBOUNCE` | Number | `300` | resize 事件防抖延迟（毫秒） |
 
-### Interception Configuration Options
+### 拦截配置选项
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | Enable Canvas API interception |
-| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | Enable CSS style interception (disabled by default) |
-| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | Enable appendChild interception (disabled by default) |
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | 启用 Canvas API 拦截 |
+| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | 启用 CSS 样式拦截（默认关闭） |
+| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | 启用 appendChild 拦截（默认关闭） |
 
-### Performance Optimization Configuration
+### 性能优化配置
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | Viewport coverage threshold (90%) for overlay detection |
-| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 match length limit for watermark detection |
-| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | Page load wait time in milliseconds |
-| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | High z-index threshold for overlay detection |
-| `LOW_OPACITY_THRESHOLD` | Number | `1` | Low opacity threshold for overlay detection |
-| `USE_TREE_WALKER` | Boolean | `false` | Use TreeWalker API for DOM traversal (experimental) |
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | 视口覆盖阈值（90%）用于覆盖层检测 |
+| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 匹配长度上限用于水印检测 |
+| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | 页面加载等待时间（毫秒） |
+| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | 高 z-index 阈值用于覆盖层检测 |
+| `LOW_OPACITY_THRESHOLD` | Number | `1` | 低透明度阈值用于覆盖层检测 |
+| `USE_TREE_WALKER` | Boolean | `false` | 使用 TreeWalker API 进行 DOM 遍历（实验性） |
 
-### Enabling Logs for Debugging
+### 启用日志进行调试
 
-When troubleshooting is needed, you can set `ENABLE_LOG` to `true`:
+当需要排查问题时，可以将 `ENABLE_LOG` 设置为 `true`：
 
 ```javascript
 const ENABLE_LOG = true;
 ```
 
-After enabling, the browser console (F12) will output detailed log information, including:
+启用后，浏览器控制台（F12）会输出详细的日志信息，包括：
 
-- Watermark detection process
-- DOM change monitoring
-- Canvas interception records
-- Error and warning information
+- 水印检测过程
+- DOM 变化监听
+- Canvas 拦截记录
+- 错误和警告信息
 
-### Performance Optimization Options
+### 性能优化选项
 
-For advanced users, the following options can be tuned for better performance:
+高级用户可以调整以下选项以获得更好的性能：
 
-1. **TreeWalker API**: Set `USE_TREE_WALKER` to `true` to use TreeWalker API for DOM traversal (may improve performance on large pages)
-2. **Debounce Settings**: Adjust `OBSERVER_DEBOUNCE` and `RESIZE_DEBOUNCE` to balance responsiveness and performance
-3. **Node Limits**: Adjust `MAX_NODES` and `MAX_DEPTH` based on page complexity
+1. **TreeWalker API**：设置 `USE_TREE_WALKER` 为 `true` 使用 TreeWalker API 进行 DOM 遍历（在大页面上可能提升性能）
+2. **防抖设置**：调整 `OBSERVER_DEBOUNCE` 和 `RESIZE_DEBOUNCE` 以平衡响应性和性能
+3. **节点限制**：根据页面复杂度调整 `MAX_NODES` 和 `MAX_DEPTH`
 
-### Interception Control
+### 拦截控制
 
-The script provides fine-grained control over prototype chain modifications:
+脚本提供对原型链修改的精细控制：
 
-- **Canvas Interception**: Enabled by default, intercepts Canvas drawing operations
-- **CSS Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
-- **appendChild Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
+- **Canvas 拦截**：默认启用，拦截 Canvas 绘制操作
+- **CSS 拦截**：默认关闭，需要时可启用（可能影响页面功能）
+- **appendChild 拦截**：默认关闭，需要时可启用（可能影响页面功能）
 
-## 🔬 How It Works
+## 🔬 工作原理
 
-### 1. Fetch Watermark Content
+### 1. 获取水印内容
 
-The script automatically calls the API to get the current user's watermark content when it starts:
+脚本启动时自动调用 API 获取当前用户的水印内容：
 
 ```
 GET https://aistudio.xiaomimimo.com/open-apis/user/mi/get
 ```
 
-API request features:
-- Automatically carries user authentication (cookies)
-- Automatically sets timezone-related request headers
-- Timeout handling (10 seconds)
-- Error retry mechanism
+API 请求特点：
+- 自动携带用户认证信息（cookies）
+- 自动设置时区相关的请求头
+- 超时处理（10秒）
+- 错误重试机制
 
-### 2. Detect Watermarks
+### 2. 检测水印
 
-The script detects watermarks on the page through multiple methods:
+脚本通过多种方式检测页面中的水印：
 
-#### Text Detection
-- Checks element `textContent`, `innerText`, `innerHTML`
-- Checks form element `value` attributes
-- Checks all HTML attribute values
+#### 文本检测
+- 检查元素的 `textContent`、`innerText`、`innerHTML`
+- 检查表单元素的 `value` 属性
+- 检查所有 HTML 属性的值
 
-#### Image Detection
-- Checks `<img>` tag `src` attributes
-- Checks CSS `background-image` properties
-- Checks inline styles for background images
+#### 图片检测
+- 检查 `<img>` 标签的 `src` 属性
+- 检查 CSS 的 `background-image` 属性
+- 检查内联样式中的背景图片
 
-#### Canvas Interception
-- Intercepts `CanvasRenderingContext2D.fillText()`
-- Intercepts `CanvasRenderingContext2D.strokeText()`
-- Intercepts `CanvasRenderingContext2D.drawImage()`
-- Prevents drawing operations containing watermark content
+#### Canvas 拦截
+- 拦截 `CanvasRenderingContext2D.fillText()`
+- 拦截 `CanvasRenderingContext2D.strokeText()`
+- 拦截 `CanvasRenderingContext2D.drawImage()`
+- 阻止包含水印内容的绘制操作
 
-#### CSS Style Detection
-- Detects full-screen overlay elements
-- Detects fixed-position elements
-- Detects `pointer-events: none` elements
-- Detects high z-index transparent elements
+#### CSS 样式检测
+- 检测全屏覆盖层元素
+- 检测固定定位的元素
+- 检测 `pointer-events: none` 的元素
+- 检测高 z-index 的透明元素
 
-### 3. Remove Watermarks
+### 3. 移除水印
 
-Executes corresponding removal operations based on the detected watermark type:
+根据检测到的水印类型，执行相应的移除操作：
 
-- **Text Watermarks**: Removes or replaces watermark text from DOM nodes
-- **Image Watermarks**: Clears background images or hides/removes elements
-- **Canvas Watermarks**: Prevents drawing or clears canvas
-- **Overlay Watermarks**: Hides or removes overlay elements
+- **文本水印**：从 DOM 节点中移除或替换水印文本
+- **图片水印**：清除背景图片或隐藏/移除元素
+- **Canvas 水印**：阻止绘制或清空画布
+- **覆盖层水印**：隐藏或移除覆盖层元素
 
-### 4. Dynamic Monitoring
+### 4. 动态监听
 
-Uses `MutationObserver` to monitor DOM changes:
+使用 `MutationObserver` 监听 DOM 变化：
 
-- Monitors child node additions and deletions
-- Monitors specific attribute changes (style, src, class, background-image)
-- Only scans changed local nodes to reduce CPU usage
-- Uses debouncing to avoid frequent execution
+- 监听子节点的添加和删除
+- 监听特定属性变化（style、src、class、background-image）
+- 仅扫描变化的局部节点，降低 CPU 占用
+- 使用防抖机制，避免频繁执行
 
-## 🛠️ Technical Implementation
+## 🛠️ 技术实现
 
-### Core Architecture
+### 核心架构
 
 ```
-├── Configuration
-│   ├── ENABLE_LOG (log switch)
-│   └── Watermark content variables
-├── Logging System
+├── 配置文件
+│   ├── ENABLE_LOG (日志开关)
+│   └── 水印内容变量
+├── 日志系统
 │   ├── logger.log()
 │   ├── logger.warn()
 │   └── logger.error()
-├── Watermark Detection
-│   ├── containsWatermark() - Text matching
-│   ├── elementContainsWatermark() - Element detection
-│   ├── imageContainsWatermark() - Image detection
-│   └── isLikelyWatermarkOverlay() - Overlay detection
-├── Watermark Removal
-│   ├── hideOverlayElement() - Hide overlay
-│   ├── removeWatermark() - Remove watermark element
-│   └── clearLikelyWatermarkCanvases() - Clear watermark canvas
-├── DOM Monitoring
-│   ├── detectAndHideOverlays() - Detect and hide overlays
-│   ├── detectAndRemoveWatermarks() - Detect and remove watermarks
-│   └── setupObserver() - Set up MutationObserver
-└── Canvas Interception
-    ├── interceptCanvas() - Intercept Canvas API
-    └── OffscreenCanvas support
+├── 水印检测
+│   ├── containsWatermark() - 文本匹配
+│   ├── elementContainsWatermark() - 元素检测
+│   ├── imageContainsWatermark() - 图片检测
+│   └── isLikelyWatermarkOverlay() - 覆盖层检测
+├── 水印移除
+│   ├── hideOverlayElement() - 隐藏覆盖层
+│   ├── removeWatermark() - 移除水印元素
+│   └── clearLikelyWatermarkCanvases() - 清空水印画布
+├── DOM 监听
+│   ├── detectAndHideOverlays() - 检测并隐藏覆盖层
+│   ├── detectAndRemoveWatermarks() - 检测并移除水印
+│   └── setupObserver() - 设置 MutationObserver
+└── Canvas 拦截
+    ├── interceptCanvas() - 拦截 Canvas API
+    └── OffscreenCanvas 支持
 ```
 
-### Performance Optimization Strategies
+### 性能优化策略
 
-1. **Debouncing**: Uses `debounce()` function to avoid frequent execution
-2. **WeakSet Caching**: Uses WeakSet to store processed elements and prevent memory leaks
-3. **Depth Limiting**: DOM traversal maximum depth limited to 10-12 levels
-4. **Local Scanning**: Only scans changed local nodes instead of full-page scans
-5. **Element Caching**: Avoids processing the same element repeatedly
+1. **防抖机制**：使用 `debounce()` 函数，避免频繁执行
+2. **WeakSet 缓存**：使用 WeakSet 存储已处理元素，避免内存泄漏
+3. **深度限制**：DOM 遍历最大深度限制为 10-12 层
+4. **局部扫描**：仅扫描变化的局部节点，而非全量扫描
+5. **元素缓存**：避免重复处理同一元素
 
-### Error Handling
+### 错误处理
 
-- All DOM operations have try-catch protection
-- API requests have timeout handling (10 seconds)
-- JSON parsing errors are captured and logged
-- Detailed error logs facilitate troubleshooting
+- 所有 DOM 操作都有 try-catch 保护
+- API 请求有超时处理（10秒）
+- JSON 解析错误会被捕获和记录
+- 详细的错误日志便于问题排查
 
-## ❓ FAQ
+## ❓ 常见问题
 
-### Q1: Script won't install?
+### Q1: 脚本无法安装？
 
-**Solutions**:
-- Make sure Tampermonkey extension is installed
-- Check if the browser supports the script
-- Try refreshing the page and reinstalling
-- Check for conflicts with other scripts
+**解决方案**：
+- 确保已安装 Tampermonkey 扩展
+- 检查浏览器是否支持该脚本
+- 尝试刷新页面后重新安装
+- 检查是否有其他脚本冲突
 
-### Q2: Watermark not removed?
+### Q2: 水印没有移除？
 
-**Solutions**:
-1. Open browser console (F12)
-2. Set `ENABLE_LOG` to `true`
-3. Refresh the page and check logs
-4. Verify script is executing correctly
+**解决方案**：
+1. 打开浏览器控制台（F12）
+2. 将 `ENABLE_LOG` 设置为 `true`
+3. 刷新页面查看日志
+4. 确认脚本是否正确执行
 
-### Q3: Page displays incorrectly?
+### Q3: 页面显示异常？
 
-**Solutions**:
-- Check for conflicts with other browser extensions
-- Try using incognito mode
-- Clear browser cache and retry
+**解决方案**：
+- 检查是否有其他浏览器扩展冲突
+- 尝试在隐身模式下使用
+- 清除浏览器缓存后重试
 
-### Q4: API request failed?
+### Q4: API 请求失败？
 
-**Solutions**:
-- Make sure you're logged in to Xiaomi MiMo Studio
-- Check network connection
-- Check console error messages
+**解决方案**：
+- 确保已登录 Xiaomi MiMo Studio
+- 检查网络连接
+- 查看控制台错误信息
 
-### Q5: Performance issues?
+### Q5: 性能问题？
 
-**Solutions**:
-- The script is optimized with low CPU usage
-- If problems persist, try:
-  - Disabling other extensions
-  - Using the latest browser version
-  - Clearing browser cache
+**解决方案**：
+- 脚本已优化，CPU 占用很低
+- 如仍有问题，尝试：
+  - 关闭其他扩展
+  - 使用最新版本浏览器
+  - 清理浏览器缓存
 
-## 🔧 Troubleshooting
+## 🔧 故障排除
 
-### Enabling Debug Mode
+### 启用调试模式
 
-1. Edit the script, change `ENABLE_LOG` to `true`
-2. Open browser console (F12 -> Console)
-3. Refresh the page and view log output
+1. 编辑脚本，将 `ENABLE_LOG` 改为 `true`
+2. 打开浏览器控制台（F12 -> Console）
+3. 刷新页面，查看日志输出
 
-### Checking Script Status
+### 查看脚本是否运行
 
-Enter in the console:
+在控制台中输入：
 ```javascript
-console.log('Script status:', typeof WATERMARK_TEXT !== 'undefined' ? 'Running' : 'Not running');
+console.log('脚本状态:', typeof WATERMARK_TEXT !== 'undefined' ? '已运行' : '未运行');
 ```
 
-### Checking Watermark Content
+### 检查水印内容
 
 ```javascript
-// Execute in console
-console.log('Current watermark:', WATERMARK_TEXT);
-console.log('Watermark candidates:', WATERMARK_TEXT_CANDIDATES);
+// 在控制台中执行
+console.log('当前水印内容:', WATERMARK_TEXT);
+console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
 ```
 
-### Resetting Script Status
+### 重置脚本状态
 
-1. Disable the script
-2. Refresh the page
-3. Re-enable the script
+1. 禁用脚本
+2. 刷新页面
+3. 重新启用脚本
 
-### Reporting Issues
+### 报告问题
 
-When encountering problems, please provide:
+当遇到问题时，请提供以下信息：
 
-1. Browser version and operating system
-2. Tampermonkey version
-3. Script version
-4. Error logs (after enabling debug mode)
-5. Problem description and reproduction steps
+1. 浏览器版本和操作系统
+2. Tampermonkey 版本
+3. 脚本版本
+4. 错误日志（开启调试模式后）
+5. 问题描述和复现步骤
 
-## 📱 Compatibility
+## 📱 兼容性
 
-| Browser | Version | Status |
-|---------|---------|--------|
-| Chrome | 90+ | ✅ Full Support |
-| Edge | 90+ | ✅ Full Support |
-| Firefox | 88+ | ✅ Full Support |
-| Safari | 14+ | ✅ Full Support |
-| Opera | 76+ | ✅ Full Support |
+| 浏览器 | 版本 | 状态 |
+|--------|------|------|
+| Chrome | 90+ | ✅ 完全支持 |
+| Edge | 90+ | ✅ 完全支持 |
+| Firefox | 88+ | ✅ 完全支持 |
+| Safari | 14+ | ✅ 完全支持 |
+| Opera | 76+ | ✅ 完全支持 |
 
-### System Requirements
+### 系统要求
 
-- Modern browser supporting ES6+
-- JavaScript enabled
-- Tampermonkey extension
+- 支持 ES6+ 的现代浏览器
+- 启用 JavaScript
+- Tampermonkey 扩展
 
-## 📝 Version History
+## 📝 版本历史
 
 ### v1.3.8 (2026-01-07)
-- **Security Fixes**:
-  - Fixed XSS security vulnerability by using innerHTML.replace() for watermark text processing
-  - Added watermark text length limit (100 characters) and safety validation to prevent ReDoS attacks
-  - Enhanced error handling with SecurityError type and detailed error context information
-- **Performance Optimizations**:
-  - Optimized style cache cleanup strategy to reduce unnecessary querySelectorAll calls
-  - Implemented intelligent polling mechanism: first 3 polls always execute, subsequent polls only execute when DOM changes detected
-  - Added mutationCount global variable for zero-overhead DOM change detection
-- **Memory Management**:
-  - Added globalObserver reference and cleanup mechanism to prevent memory leaks
-  - Automatically cleanup MutationObserver on page unload
-- **Code Quality**:
-  - Eliminated magic numbers by extracting HIGH_ZINDEX_THRESHOLD and LOW_OPACITY_THRESHOLD to CONFIG
-  - Added detailed JSDoc comments for key functions (isLikelyWatermarkOverlay, removeWatermark)
-  - Improved log configuration to support dynamic control via localStorage and URL parameters
-- **Bug Fixes**:
-  - Fixed issue where watermarks were not removed on initial page load
-  - Fixed inaccurate watermark detection caused by over-simplified style cache cleanup
-- **Documentation Updates**:
-  - Updated README with new configuration items
-  - Added intelligent polling sequence diagram
-  - Updated documentation version to v1.3.8
+- **安全修复**：
+  - 修复 XSS 安全漏洞，使用 innerHTML.replace() 处理水印文本
+  - 添加水印文本长度限制（100字符）和安全验证，防止 ReDoS 攻击
+  - 增强错误处理，添加 SecurityError 类型和详细错误上下文信息
+- **性能优化**：
+  - 优化样式缓存清理策略，减少不必要的 querySelectorAll 调用
+  - 实现智能轮询机制：前3次轮询总是执行检测，后续只在有 DOM 变化时执行
+  - 添加 mutationCount 全局变量，实现零开销的 DOM 变化检测
+- **内存管理**：
+  - 添加 globalObserver 引用和清理机制，防止内存泄漏
+  - 在页面卸载时自动清理 MutationObserver
+- **代码质量**：
+  - 消除魔法数字，提取 HIGH_ZINDEX_THRESHOLD 和 LOW_OPACITY_THRESHOLD 到 CONFIG
+  - 为关键函数添加详细的 JSDoc 注释（isLikelyWatermarkOverlay、removeWatermark）
+  - 改进日志配置，支持通过 localStorage 和 URL 参数动态控制
+- **Bug 修复**：
+  - 修复初始加载时水印无法去除的问题
+  - 修复样式缓存清理过度简化导致的检测不准确问题
+- **文档更新**：
+  - 更新 README，添加新配置项说明
+  - 添加智能轮询时序图
+  - 更新文档版本到 v1.3.8
 
 ### v1.3.7 (2026-01-05)
-- **Code Quality Improvements**:
-  - Refactored `detectAndRemoveWatermarks` function into 6 sub-functions for better maintainability
-  - Extracted magic numbers to CONFIG object (VIEWPORT_COVERAGE_THRESHOLD, BASE64_MATCH_MAX_LENGTH, PAGE_LOAD_WAIT_TIME)
-  - Added regex expression caching to avoid repeated compilation
-  - Enhanced error logging with context information (error, stack, timestamp, URL, user agent)
-  - Added configuration validation function to prevent configuration errors
-  - Renamed `clearLikelyWatermarkCanvases` to `clearSuspectedWatermarkCanvases` for better semantics
-- **Performance Optimizations**:
-  - Implemented TreeWalker API option for DOM traversal (experimental feature)
-  - Optimized style cache invalidation strategy with fine-grained clearing (attribute, childList, default)
-  - Improved debounce logic in MutationObserver to ensure performance optimization
-- **Bug Fixes**:
-  - Fixed debounce logic issue that caused frequent scanning
-  - Fixed configuration validation to include all new config items
-  - Fixed TreeWalker recursion issue that could cause node processing limit issues
+- **代码质量改进**：
+  - 将 `detectAndRemoveWatermarks` 函数重构为 6 个子函数，提高可维护性
+  - 将魔法数字提取到 CONFIG 对象（VIEWPORT_COVERAGE_THRESHOLD、BASE64_MATCH_MAX_LENGTH、PAGE_LOAD_WAIT_TIME）
+  - 添加正则表达式缓存，避免重复编译
+  - 增强错误日志，添加上下文信息（错误、堆栈、时间戳、URL、用户代理）
+  - 添加配置验证函数，防止配置错误
+  - 将 `clearLikelyWatermarkCanvases` 重命名为 `clearSuspectedWatermarkCanvases`，语义更清晰
+- **性能优化**：
+  - 实现 TreeWalker API 选项用于 DOM 遍历（实验性功能）
+  - 优化样式缓存失效策略，支持精细的缓存清理（attribute、childList、default）
+  - 修复 MutationObserver 中的防抖逻辑，确保性能优化生效
+- **Bug 修复**：
+  - 修复防抖逻辑问题，导致频繁扫描
+  - 修复配置验证，包含所有新增配置项
+  - 修复 TreeWalker 递归调用问题，可能导致节点处理限制失效
 
 ### v1.3.6 (2026-01-04)
-- Code Refactoring: Fixed code formatting issues, unified indentation and blank lines
-- Function Optimization: Standardized startWatermarkRemoval function definition, fixed scope issues
-- Performance Optimization: Optimized containsWatermark function, removed redundant filtering logic, pre-filtered in rebuildWatermarkCandidates
-- Performance Optimization: Improved regex replacement timeout check logic, moved timeout check to before and after the entire operation
-- Code Refactoring: Split isLikelyWatermarkOverlay function into 8 helper functions for better maintainability
-- Cache Optimization: Improved style cache cleanup logic, ensures clearing element caches in Shadow Root
-- API Optimization: Simplified API request headers from 12 to 3, reducing risk of being identified as a crawler
-- Feature Added: Added configuration switches to control prototype chain modifications (ENABLE_CANVAS_INTERCEPT, ENABLE_CSS_INTERCEPT, ENABLE_APPEND_CHILD_INTERCEPT)
-- Documentation Updated: Updated sequence diagram documentation to reflect all code improvements
+- 代码重构：修复代码格式问题，统一缩进和空行
+- 函数优化：将 startWatermarkRemoval 函数定义规范化，修复作用域问题
+- 性能优化：优化 containsWatermark 函数，移除重复的过滤逻辑，在 rebuildWatermarkCandidates 中预过滤
+- 性能优化：改进正则替换超时检查逻辑，将超时检查移到整个操作的前后
+- 代码重构：拆分 isLikelyWatermarkOverlay 函数，创建 8 个辅助函数提高可维护性
+- 缓存优化：改进样式缓存清理逻辑，确保清理 Shadow Root 中的元素缓存
+- API 优化：简化 API 请求 headers，从 12 个减少到 3 个，降低被识别为爬虫的风险
+- 功能新增：添加配置开关控制原型链修改（ENABLE_CANVAS_INTERCEPT、ENABLE_CSS_INTERCEPT、ENABLE_APPEND_CHILD_INTERCEPT）
+- 文档更新：更新时序图文档，反映所有代码改进
 
 ### v1.3.5 (2025-12-30)
-- Security fix: Fixed memory leak risk by adding cleanup mechanism for timers and event listeners
-- Security fix: Fixed prototype pollution risk by using Object.defineProperty to reduce impact on third-party code
-- Security fix: Fixed recursion depth issue by converting recursion to iteration and adding node count limits
-- Performance: Added style caching mechanism to reduce getComputedStyle calls
-- Security fix: Fixed regex DoS risk by adding safety validation and timeout protection
-- Code improvement: Added configuration constants object to centrally manage all configuration parameters
-- Error handling: Enhanced network error handling and API response validation
-- Edge cases: Improved handling for zero viewport size and proper handling of zIndex as 'auto'
-- Input validation: Added input validation for critical functions to prevent issues from invalid inputs
+- 安全修复：修复内存泄漏风险，添加定时器和事件监听器的清理机制
+- 安全修复：修复原型链污染风险，使用 Object.defineProperty 减少对第三方代码的影响
+- 安全修复：修复递归深度问题，将递归改为迭代，添加节点数量限制
+- 性能优化：添加样式缓存机制，减少 getComputedStyle 调用
+- 安全修复：修复正则表达式拒绝服务风险，添加安全验证和超时保护
+- 代码改进：添加配置常量对象，集中管理所有配置参数
+- 错误处理：增强网络错误处理和 API 响应验证
+- 边界条件：改进视口尺寸为 0 时的处理，正确处理 zIndex 为 'auto' 的情况
+- 输入验证：为关键函数添加输入验证，防止无效输入导致的问题
 
 ### v1.3.4 (2025-12-29)
-- Fix: Fixed watermark detection timing issue by changing @run-at from document-start to document-end
-- Feature: Added periodic polling detection mechanism (every 500ms for 10 seconds)
-- Feature: Added window resize listener to re-detect watermarks on layout changes
-- Improvement: Enhanced error handling with error statistics functionality
-- Optimization: Merged duplicate detection functions for better code logic
-- Optimization: Optimized DOM traversal performance by reducing getComputedStyle calls
+- 修复：修复水印检测时机问题，将 @run-at 从 document-start 改为 document-end
+- 新增：添加定期轮询检测机制（10秒内每500ms检测一次）
+- 新增：添加窗口 resize 监听，确保布局变化时重新检测
+- 改进：改进错误处理，添加错误统计功能
+- 优化：优化代码逻辑，合并重复的检测函数
+- 优化：优化 DOM 遍历性能，减少 getComputedStyle 调用
 
 ### v1.3.3 (2025-12-24)
-- Performance: Removed redundant DOM scans, cleanup process now executes once
-- Code: Removed duplicate initialization calls, streamlined main flow
-- Error handling: Added debug logs for critical operations to aid troubleshooting
+- 性能优化：移除重复的 DOM 扫描，清理流程改为单次执行
+- 代码优化：移除重复的初始化调用，精简主流程
+- 异常处理改进：为关键操作添加调试日志，便于问题排查
 
 ### v1.3.2
-- Use the browser timezone for the `x-timezone` request header
+- `x-timezone` 请求头改为根据浏览器时区自动获取
 
 ### v1.3.1
-- Improved Windows initial watermark flash: early hide/cleanup of fullscreen Canvas watermark overlay
-- Improved cleanup timing: handle overlay before watermark text is fetched, reducing reliance on forced re-render
-- Performance: bounded requestAnimationFrame cleanup loop and debounced MutationObserver callbacks to avoid sustained high CPU usage
+- 优化 Windows 下首屏水印闪现问题：新增对全屏 Canvas 水印覆盖层的提前隐藏与清理
+- 优化清理触发时机：在获取水印内容前先处理覆盖层，减少对页面重绘依赖
+- 性能优化：清理流程使用有上限的 requestAnimationFrame 链执行
 
 ### v1.3.0
-- Optimized DOM observation logic to scan only the local subtree of changed nodes, significantly reducing CPU usage
-- Removed periodic full-page scans and rely on incremental detection via MutationObserver for better performance and responsiveness
+- 优化 DOM 监听逻辑，仅对发生变化的局部节点进行扫描
+- 移除定时全量扫描，依赖 MutationObserver 的增量检测
 
 ### v1.2.0
-- Added global log switch, disabled by default
-- Unified log output format
+- 添加全局日志开关，默认关闭
+- 统一日志输出格式
 
 ### v1.1.0
-- Added dynamic watermark fetching functionality
-- Added retry mechanism and page detection fallback
-- Improved error handling and log output
+- 添加动态获取水印功能
+- 添加重试机制和页面检测备选方案
+- 改进错误处理和日志输出
 
 ### v1.0.0
-- Initial release
-- Supports detection and removal of multiple watermark forms
+- 初始版本发布
+- 支持多种水印形式的检测和移除
 
-## ⚠️ Notes
+## ⚠️ 注意事项
 
-- This script is for learning and research purposes only
-- Please ensure compliance with the relevant website's terms of use before using
-- The script automatically fetches the watermark content of the currently logged-in user, no manual configuration required
-- Regularly update the script to get the latest features and fixes
-- If you encounter issues, please check the FAQ and troubleshooting sections first
+- 本脚本仅用于学习和研究目的
+- 使用前请确保遵守相关网站的使用条款
+- 脚本会自动获取当前登录用户的水印内容，无需手动配置
+- 定期更新脚本以获取最新功能和修复
+- 如遇到问题，请先查看常见问题和故障排除部分
 
-## 📄 License
+## 📄 许可证
 
-This project is open source under the MIT License.
+本项目采用 MIT 许可证开源。
 
 ```
 MIT License
@@ -506,30 +506,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## 🤝 Contributing
+## 🤝 贡献
 
-Contributions are welcome! Please follow these steps:
+欢迎贡献代码！请遵循以下步骤：
 
-1. Fork this project
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Submit a Pull Request
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
 
-### Contribution Guidelines
+### 贡献指南
 
-- Follow the project's code style
-- Ensure code passes lint checks
-- Add appropriate tests
-- Update relevant documentation
+- 遵循项目的代码风格
+- 确保代码通过 lint 检查
+- 添加适当的测试
+- 更新相关文档
 
-## 🔗 Related Links
+## 🔗 相关链接
 
 - [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)
-- [Tampermonkey Official Website](https://www.tampermonkey.net/)
-- [Greasy Fork Script Page](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
-- [GitHub Project](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover)
-- [Issue Report](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/issues)
+- [Tampermonkey 官网](https://www.tampermonkey.net/)
+- [Greasy Fork 脚本页面](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+- [GitHub 项目地址](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover)
+- [问题反馈](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/issues)
 
 ## ⭐ Star History
 
@@ -537,4 +537,4 @@ Contributions are welcome! Please follow these steps:
 
 ---
 
-**Thank you for using!** If this script helps you, please give the project a Star to show your support.
+**感谢您的使用！** 如果这个脚本对您有帮助，请给个项目 Star 支持一下。
