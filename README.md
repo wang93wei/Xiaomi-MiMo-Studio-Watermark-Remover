@@ -91,6 +91,9 @@ The script supports the following configuration options (modify at the beginning
 ```javascript
 // ========== Configuration Options ==========
 // Log switch (set to true to enable logs, false to disable)
+// Supports dynamic control via localStorage or URL parameters:
+// - localStorage: localStorage.setItem('watermark_debug', 'true')
+// - URL parameter: ?debug=true
 const ENABLE_LOG = false;
 ```
 
@@ -128,6 +131,8 @@ const ENABLE_LOG = false;
 | `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | Viewport coverage threshold (90%) for overlay detection |
 | `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 match length limit for watermark detection |
 | `PAGE_LOAD_WAIT_TIME` | Number | `2000` | Page load wait time in milliseconds |
+| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | High z-index threshold for overlay detection |
+| `LOW_OPACITY_THRESHOLD` | Number | `1` | Low opacity threshold for overlay detection |
 | `USE_TREE_WALKER` | Boolean | `false` | Use TreeWalker API for DOM traversal (experimental) |
 
 ### Enabling Logs for Debugging

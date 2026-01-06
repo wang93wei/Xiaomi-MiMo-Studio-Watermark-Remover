@@ -91,6 +91,9 @@
 ```javascript
 // ========== 配置选项 ==========
 // 日志开关（设置为 true 启用日志，false 关闭日志）
+// 支持通过 localStorage 或 URL 参数动态控制：
+// - localStorage: localStorage.setItem('watermark_debug', 'true')
+// - URL 参数: ?debug=true
 const ENABLE_LOG = false;
 ```
 
@@ -128,6 +131,8 @@ const ENABLE_LOG = false;
 | `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | 视口覆盖阈值（90%）用于覆盖层检测 |
 | `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 匹配长度上限用于水印检测 |
 | `PAGE_LOAD_WAIT_TIME` | Number | `2000` | 页面加载等待时间（毫秒） |
+| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | 高 z-index 阈值用于覆盖层检测 |
+| `LOW_OPACITY_THRESHOLD` | Number | `1` | 低透明度阈值用于覆盖层检测 |
 | `USE_TREE_WALKER` | Boolean | `false` | 使用 TreeWalker API 进行 DOM 遍历（实验性） |
 
 ### 启用日志进行调试

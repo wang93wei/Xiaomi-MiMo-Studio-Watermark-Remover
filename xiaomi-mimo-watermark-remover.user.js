@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Xiaomi MiMo Studio 去水印
 // @namespace    https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover
-// @version      1.3.7
+// @version      1.3.8
 // @description  自动检测并移除 Xiaomi MiMo Studio 页面中的水印内容（动态获取水印）
 // @author       AlanWang
 // @license      MIT
@@ -56,6 +56,10 @@
         VIEWPORT_COVERAGE_THRESHOLD: 0.9,  // 视口覆盖阈值（90%），用于判断元素是否覆盖大部分视口
         BASE64_MATCH_MAX_LENGTH: 50,      // Base64 匹配长度上限，用于从页面检测水印
         PAGE_LOAD_WAIT_TIME: 2000,        // 页面加载后等待时间（毫秒）
+
+        // 样式检测阈值配置
+        HIGH_ZINDEX_THRESHOLD: 100,       // 高z-index阈值，用于判断元素是否在顶层
+        LOW_OPACITY_THRESHOLD: 1,         // 低透明度阈值，用于判断元素是否半透明
 
         // 性能优化配置
         USE_TREE_WALKER: false,           // 使用 TreeWalker API 进行 DOM 遍历（实验性功能）
@@ -130,47 +134,52 @@
         }
     }
 
-    // 精细的样式缓存清理函数
+    // 优化的样式缓存清理函数
     function clearStyleCacheForNode(node, mutationType = 'default') {
         if (!node) return;
 
+        // 清理当前节点的缓存
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            styleCache.delete(node);
+        }
+
+        // 根据mutation类型选择性清理子节点
         switch (mutationType) {
             case 'attribute':
-                // 属性变化：只清除当前节点的缓存
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    styleCache.delete(node);
-                }
+                // 属性变化：只清理当前节点，不清理子节点
+                // 子节点的样式不会因为父节点的属性变化而改变
                 break;
 
             case 'childList':
-                // 子节点添加：清除当前节点和新子节点的缓存
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    styleCache.delete(node);
-                }
-                if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                    const children = node.querySelectorAll ? node.querySelectorAll('*') : [];
-                    children.forEach(el => styleCache.delete(el));
+                // 子节点添加：清理新添加的子节点缓存
+                // 只清理第一层子节点，避免深度遍历
+                if (node.nodeType === Node.ELEMENT_NODE && node.children) {
+                    Array.from(node.children).forEach(child => {
+                        if (child.nodeType === Node.ELEMENT_NODE) {
+                            styleCache.delete(child);
+                        }
+                    });
                 }
                 break;
 
             default:
-                // 默认：清除当前节点及其所有子节点的缓存
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    styleCache.delete(node);
-                    const children = node.querySelectorAll ? node.querySelectorAll('*') : [];
-                    children.forEach(el => styleCache.delete(el));
-                    if (node.shadowRoot) {
-                        const shadowChildren = node.shadowRoot.querySelectorAll ? node.shadowRoot.querySelectorAll('*') : [];
-                        shadowChildren.forEach(el => styleCache.delete(el));
-                    }
-                } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                    const fragmentChildren = node.querySelectorAll ? node.querySelectorAll('*') : [];
-                    fragmentChildren.forEach(el => styleCache.delete(el));
+                // 默认：清理当前节点及其直接子节点
+                if (node.nodeType === Node.ELEMENT_NODE && node.children) {
+                    Array.from(node.children).forEach(child => {
+                        if (child.nodeType === Node.ELEMENT_NODE) {
+                            styleCache.delete(child);
+                        }
+                    });
+                }
+                // 处理Shadow DOM
+                if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
+                    const shadowChildren = node.shadowRoot.querySelectorAll ? node.shadowRoot.querySelectorAll('*') : [];
+                    shadowChildren.forEach(el => styleCache.delete(el));
                 }
                 break;
         }
     }
-    
+
     // 防抖函数
     function debounce(func, wait) {
         let timeout;
@@ -187,6 +196,18 @@
     // 获取缓存的水印正则表达式
     function getWatermarkRegex(watermarkText) {
         if (!watermarkText || typeof watermarkText !== 'string') return null;
+
+        // 严格验证水印文本
+        if (!isSafeWatermarkText(watermarkText)) {
+            logger.warn('水印文本不安全，拒绝创建正则表达式');
+            return null;
+        }
+
+        // 检查长度，防止过长的文本导致性能问题
+        if (watermarkText.length > 100) {
+            logger.warn('水印文本过长，拒绝创建正则表达式');
+            return null;
+        }
 
         if (watermarkRegexCache.has(watermarkText)) {
             return watermarkRegexCache.get(watermarkText);
@@ -382,7 +403,7 @@
         return style.pointerEvents === 'none';
     }
 
-    // 检查元素是否有高 z-index（>= 100）
+    // 检查元素是否有高 z-index
     function hasHighZIndex(element) {
         const style = getCachedStyle(element);
         if (!style) return false;
@@ -390,12 +411,12 @@
         const zIndexStr = style.zIndex;
         if (zIndexStr && zIndexStr !== 'auto') {
             const zIndex = Number(zIndexStr);
-            return Number.isFinite(zIndex) && zIndex >= 100;
+            return Number.isFinite(zIndex) && zIndex >= CONFIG.HIGH_ZINDEX_THRESHOLD;
         }
         return false;
     }
 
-    // 检查元素是否有低透明度（< 1）
+    // 检查元素是否有低透明度
     function hasLowOpacity(element) {
         const style = getCachedStyle(element);
         if (!style) return false;
@@ -403,7 +424,7 @@
         const opacityStr = style.opacity;
         if (opacityStr && opacityStr !== 'auto') {
             const opacity = Number(opacityStr);
-            return Number.isFinite(opacity) && opacity < 1;
+            return Number.isFinite(opacity) && opacity < CONFIG.LOW_OPACITY_THRESHOLD;
         }
         return false;
     }
@@ -450,7 +471,18 @@
                 rect.height >= docHeight * CONFIG.VIEWPORT_COVERAGE_THRESHOLD);
     }
 
-    // 主函数：检查元素是否可能是水印覆盖层
+    /**
+     * 检查元素是否可能是水印覆盖层
+     * @param {HTMLElement} element - 要检查的DOM元素
+     * @returns {boolean} 如果元素可能是水印覆盖层返回true，否则返回false
+     *
+     * 判断标准:
+     * 1. 元素是Canvas或容器元素(DIV/SECTION/MAIN/ASIDE)
+     * 2. 设置了pointer-events: none
+     * 3. 有背景图片或是Canvas
+     * 4. 覆盖大部分视口(>=90%)
+     * 5. 至少满足以下条件之一: 高z-index、低透明度、绝对定位
+     */
     function isLikelyWatermarkOverlay(element) {
         if (!isValidWatermarkElement(element)) return false;
         if (!hasPointerEventsNone(element)) return false;
@@ -710,7 +742,17 @@
         return false;
     }
 
-    // 移除水印元素
+    /**
+     * 移除水印元素
+     * @param {HTMLElement} element - 要移除水印的DOM元素
+     * @returns {void}
+     *
+     * 功能说明:
+     * - 如果元素只包含水印文本，直接移除元素
+     * - 如果元素包含其他内容，尝试移除水印文本部分
+     * - 如果是图片水印，清除背景图片或隐藏元素
+     * - 使用安全的正则表达式替换，避免XSS攻击
+     */
     function removeWatermark(element) {
         if (!element || processedElements.has(element)) return;
 
@@ -771,6 +813,8 @@
                         if (element.innerText) {
                             element.innerText = element.innerText.replace(watermarkRegex, '');
                         }
+                        // 处理innerHTML中的水印（包括属性值）
+                        // 注意：水印文本已通过isSafeWatermarkText()验证，直接替换是安全的
                         if (element.innerHTML) {
                             element.innerHTML = element.innerHTML.replace(watermarkRegex, '');
                         }
@@ -836,6 +880,9 @@
         }, CONFIG.OBSERVER_DEBOUNCE);
 
         const observer = new MutationObserver((mutations) => {
+            // 更新变化计数，用于智能轮询
+            mutationCount += mutations.length;
+
             const nodesToScan = { childList: [], attribute: [] };
 
             mutations.forEach((mutation) => {
@@ -876,17 +923,27 @@
 
         // 开始观察
         if (document.body) {
+            globalObserver = observer;
             observer.observe(document.body, config);
         } else {
             // 等待 body 加载后再开始观察
             const bodyObserver = new MutationObserver((mutations, obs) => {
                 if (document.body) {
+                    globalObserver = observer;
                     observer.observe(document.body, config);
                     obs.disconnect();
                 }
             });
             bodyObserver.observe(document.documentElement, { childList: true });
         }
+
+        // 在页面卸载时清理observer
+        window.addEventListener('unload', () => {
+            if (globalObserver) {
+                globalObserver.disconnect();
+                globalObserver = null;
+            }
+        });
     }
 
     // Canvas 水印检测（拦截 Canvas 绘制操作）
@@ -1200,12 +1257,23 @@
                 });
             } catch (networkError) {
                 clearTimeout(timeoutId);
+
+                const errorContext = formatErrorContext(networkError, {
+                    url: USER_API_URL,
+                    timeout: CONFIG.FETCH_TIMEOUT
+                });
+
                 if (networkError.name === 'AbortError') {
-                    logger.error('获取水印请求超时');
+                    logger.error('获取水印请求超时', errorContext);
+                    // 可以考虑降级方案：从页面检测水印
                 } else if (networkError.name === 'TypeError') {
-                    logger.error('网络错误，请检查网络连接:', networkError);
+                    logger.error('网络错误，请检查网络连接', errorContext);
+                    // 可以提示用户检查网络
+                } else if (networkError.name === 'SecurityError') {
+                    logger.error('安全错误，可能是跨域问题', errorContext);
+                    // 可以尝试从页面检测
                 } else {
-                    logger.error('网络请求失败:', networkError);
+                    logger.error('网络请求失败', errorContext);
                 }
                 logger.stat('fetchErrors');
                 return false;
@@ -1348,6 +1416,8 @@
     // 全局变量存储定时器和事件监听器引用，防止内存泄漏
     let pollTimer = null;
     let resizeHandler = null;
+    let globalObserver = null;
+    let mutationCount = 0; // 用于跟踪DOM变化，优化轮询性能
 
     // 清理函数，用于清理定时器和事件监听器
     function cleanup() {
@@ -1358,6 +1428,10 @@
         if (resizeHandler) {
             window.removeEventListener('resize', resizeHandler);
             resizeHandler = null;
+        }
+        if (globalObserver) {
+            globalObserver.disconnect();
+            globalObserver = null;
         }
     }
 
@@ -1388,6 +1462,7 @@
         const maxPollCount = CONFIG.MAX_POLL_COUNT;
         const pollInterval = CONFIG.POLL_INTERVAL;
 
+        // 使用智能轮询:前3次总是执行检测，之后只在有变化时执行
         pollTimer = setInterval(() => {
             pollCount++;
             if (pollCount > maxPollCount) {
@@ -1396,8 +1471,14 @@
                 logger.log('轮询检测完成');
                 return;
             }
-            detectAndRemoveWatermarks();
-            clearSuspectedWatermarkCanvases();
+
+            // 前3次轮询总是执行检测，确保初始加载时的水印能被移除
+            // 之后只在有DOM变化时执行，提高性能
+            if (pollCount <= 3 || mutationCount > 0) {
+                mutationCount = 0; // 重置计数器
+                detectAndRemoveWatermarks();
+                clearSuspectedWatermarkCanvases();
+            }
         }, pollInterval);
 
         // 监听窗口 resize 事件，确保布局变化时重新检测

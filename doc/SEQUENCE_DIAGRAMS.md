@@ -1,10 +1,17 @@
 # Xiaomi MiMo Studio 去水印脚本 - 时序图文档
 
-**版本**: v1.3.7 | **更新日期**: 2026-01-05
+**版本**: v1.3.8 | **更新日期**: 2026-01-07
 
 本文档包含项目的时序图，展示脚本各组件之间的时间交互关系。
 
 ## 文档更新说明
+
+### v1.3.8 更新内容
+- 更新清理机制时序图，添加globalObserver的清理逻辑
+- 更新配置验证时序图，添加HIGH_ZINDEX_THRESHOLD和LOW_OPACITY_THRESHOLD配置项验证
+- 更新轮询时序图，体现智能轮询机制（前3次总是执行，之后只在有变化时执行）
+- 更新整体架构时序图，添加mutationCount全局变量
+- 添加日志配置时序图，展示localStorage和URL参数支持
 
 ### v1.3.7 更新内容
 - 添加配置验证时序图，展示启动时的配置验证流程
@@ -764,7 +771,7 @@ sequenceDiagram
 
     Note over Script,Timer: 脚本继续运行...
 
-    Note over Script,Timer: 注意：当前实现中 cleanup() 函数仅清除定时器和事件监听器，未实现断开 MutationObserver 和清空缓存的逻辑
+    Note over Script,Timer: 注意：cleanup() 函数清除定时器、事件监听器和 MutationObserver
 ```
 
 ## 11. 安全验证时序图
@@ -919,6 +926,8 @@ sequenceDiagram
         Validator->>Validator: 验证 VIEWPORT_COVERAGE_THRESHOLD (0.5-1)
         Validator->>Validator: 验证 BASE64_MATCH_MAX_LENGTH (10-1000)
         Validator->>Validator: 验证 PAGE_LOAD_WAIT_TIME (1000-10000)
+        Validator->>Validator: 验证 HIGH_ZINDEX_THRESHOLD (number)
+        Validator->>Validator: 验证 LOW_OPACITY_THRESHOLD (number)
         Validator->>Validator: 验证 USE_TREE_WALKER (boolean)
     end
 
@@ -1093,6 +1102,63 @@ sequenceDiagram
     end
 
     Note over Observer,Scanner: 精细的缓存清理策略减少不必要的样式重新计算，提升性能
+```
+
+## 15. 智能轮询时序图
+
+```mermaid
+sequenceDiagram
+    participant Script as 脚本
+    participant Timer as 定时器
+    participant DOM as DOM树
+    participant Observer as MutationObserver
+    participant Counter as 变化计数器
+
+    Script->>Script: 启动水印移除功能
+    Script->>Counter: 初始化 mutationCount = 0
+    Script->>Timer: 创建轮询定时器 (500ms间隔)
+
+    Note over Script,Timer: 轮询检测阶段 (最多20次)
+
+    loop 轮询检测
+        Timer->>Script: 触发轮询 (每500ms)
+        Script->>Script: pollCount++
+
+        alt pollCount <= 3 (初始3次)
+            Note over Script: 总是执行检测，确保初始水印被移除
+            Script->>DOM: 全量扫描
+            DOM-->>Script: 扫描结果
+            Script->>DOM: 检测并移除水印
+        else pollCount > 3 (后续轮询)
+            Script->>Counter: 检查 mutationCount
+
+            alt mutationCount > 0
+                Note over Script: 有DOM变化，执行检测
+                Script->>Counter: 重置 mutationCount = 0
+                Script->>DOM: 智能扫描
+                DOM-->>Script: 扫描结果
+                Script->>DOM: 检测并移除水印
+            else mutationCount = 0
+                Note over Script: 无DOM变化，跳过检测（性能优化）
+            end
+        end
+
+        alt pollCount > MAX_POLL_COUNT
+            Script->>Timer: 清除定时器
+            Timer-->>Script: pollTimer = null
+            Note over Script: 轮询检测完成
+        end
+    end
+
+    Note over Script,Observer: MutationObserver持续监控DOM变化
+
+    loop DOM变化监控
+        DOM->>Observer: DOM变化事件
+        Observer->>Counter: mutationCount += mutations.length
+        Note over Counter: 记录变化数量
+    end
+
+    Note over Script,Counter: 智能轮询机制：前3次确保初始检测，后续只在有变化时执行，提升性能
 ```
 
 这些时序图全面展示了 Xiaomi MiMo Studio 去水印脚本的组件交互和执行流程。
