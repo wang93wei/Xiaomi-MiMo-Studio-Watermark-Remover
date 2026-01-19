@@ -87,9 +87,6 @@ The script supports the following configuration options (modify at the beginning
 ```javascript
 // ========== Configuration Options ==========
 // Log switch (set to true to enable logs, false to disable)
-// Supports dynamic control via localStorage or URL parameters:
-// - localStorage: localStorage.setItem('watermark_debug', 'true')
-// - URL parameter: ?debug=true
 const ENABLE_LOG = false;
 ```
 

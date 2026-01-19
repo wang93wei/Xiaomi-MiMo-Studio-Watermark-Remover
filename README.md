@@ -93,9 +93,6 @@
 ```javascript
 // ========== 配置选项 ==========
 // 日志开关（设置为 true 启用日志，false 关闭日志）
-// 支持通过 localStorage 或 URL 参数动态控制：
-// - localStorage: localStorage.setItem('watermark_debug', 'true')
-// - URL 参数: ?debug=true
 const ENABLE_LOG = false;
 ```
 
