@@ -1,10 +1,10 @@
 # Xiaomi MiMo Studio Watermark Remover
 
-A Tampermonkey userscript that automatically detects and removes watermarks from Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) pages.
-
-🇨🇳 [中文](./doc/README_zh.md) | 🇺🇸 **English**
+🇨🇳 [中文](./README.md) | 🇺🇸 **English**
 
 ---
+
+A Tampermonkey userscript that automatically detects and removes Canvas watermarks from Xiaomi MiMo Studio (https://aistudio.xiaomimimo.com/) pages.
 
 ## 📋 Table of Contents
 
@@ -13,37 +13,33 @@ A Tampermonkey userscript that automatically detects and removes watermarks from
 - [Configuration](#configuration)
 - [How It Works](#how-it-works)
   - [Fetching Watermark Content](#1-fetching-watermark-content)
-  - [Detecting Watermarks](#2-detecting-watermarks)
-  - [Removing Watermarks](#3-removing-watermarks)
+  - [Canvas Interception](#2-canvas-interception)
+  - [Canvas Cleanup](#3-canvas-cleanup)
   - [Dynamic Monitoring](#4-dynamic-monitoring)
 - [Technical Implementation](#technical-implementation)
   - [Core Architecture](#core-architecture)
-  - [Performance Optimization Strategies](#performance-optimization-strategies)
+  - [Performance Optimization](#performance-optimization)
   - [Error Handling](#error-handling)
 - [FAQ](#faq)
 - [Troubleshooting](#troubleshooting)
-  - [Enable Debug Mode](#enable-debug-mode)
-  - [Check if Script is Running](#check-if-script-is-running)
-  - [Check Watermark Content](#check-watermark-content)
-  - [Reset Script State](#reset-script-state)
-  - [Report Issues](#report-issues)
 - [Compatibility](#compatibility)
 - [Version History](#version-history)
-- [Notes](#notes)
 - [License](#license)
 - [Contributing](#contributing)
 - [Related Links](#related-links)
 
 ## ✨ Features
 
-- ✅ **Dynamic Watermark Detection**: Automatically fetches the current user's watermark content from the API, no manual configuration required
-- ✅ **Multiple Detection Methods**: Supports detection and removal of watermarks in various forms including text, images, Canvas, and CSS
-- ✅ **Real-time Monitoring**: Uses MutationObserver to monitor DOM changes and automatically detects and removes dynamically added watermarks
-- ✅ **Performance Optimization**: Debouncing, element caching, detection depth limiting, and other optimizations
+- ✅ **Dynamic Watermark Detection**: Automatically fetches current user's watermark content from API, no manual configuration required
+- ✅ **Canvas Interception**: Intercepts Canvas drawing operations to prevent watermark text and image rendering
+- ✅ **Canvas Cleanup**: Automatically detects and clears suspicious Canvas elements covering most of the viewport
+- ✅ **Real-time Monitoring**: Monitors window resize events to re-detect when layout changes
+- ✅ **Periodic Polling**: Periodically detects dynamically generated Canvas watermarks
 - ✅ **Log Control**: Configurable log switch, disabled by default, can be enabled for debugging
 - ✅ **Exception Handling**: Complete error handling and logging for easy troubleshooting
 - ✅ **Zero Dependencies**: Pure native JavaScript implementation, no external dependencies
 - ✅ **Memory Optimization**: Uses WeakSet to prevent memory leaks
+- ✅ **Modern Syntax**: Uses ES6+ features, clean and efficient code
 
 ## 🚀 Installation
 
@@ -55,27 +51,27 @@ First, you need to install the Tampermonkey browser extension:
 - **Firefox**: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/tampermonkey/)
 - **Safari**: [App Store](https://apps.apple.com/app/tampermonkey/id1482490089)
 
-### 2. Install the Script
+### 2. Install Script
 
 Choose one of the following methods to install the script:
 
 #### Method 1: Install from Greasy Fork (Recommended)
 
-1. Visit the [Greasy Fork script page](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+1. Visit [Greasy Fork script page](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
 2. Click the "Install this script" button on the page
-3. Confirm the installation
+3. Confirm installation
 
 #### Method 2: Install from OpenUserJS
 
-1. Visit the [OpenUserJS script page](https://openuserjs.org/scripts/AlanWang/Xiaomi_MiMo_Studio_%E5%8E%BB%E6%B0%B4%E5%8D%B0)
+1. Visit [OpenUserJS script page](https://openuserjs.org/scripts/AlanWang/Xiaomi_MiMo_Studio_%E5%8E%BB%E6%B0%B4%E5%8D%B0)
 2. Click the "Install" button on the page
-3. Confirm the installation
+3. Confirm installation
 
 #### Method 3: Install directly from GitHub
 
-1. Visit the [GitHub Raw URL](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/raw/refs/heads/main/xiaomi-mimo-watermark-remover.user.js)
+1. Visit [GitHub Raw URL](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/raw/refs/heads/main/xiaomi-mimo-watermark-remover.user.js)
 2. Tampermonkey will automatically recognize and prompt for installation
-3. Click the "Install" button to confirm
+3. Click "Install" button to confirm
 
 ### 3. Verify Installation
 
@@ -100,40 +96,32 @@ const ENABLE_LOG = false;
 ### Core Configuration Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+|---------|------|---------|-------------|
 | `ENABLE_LOG` | Boolean | `false` | Controls whether to output debug logs, `true` to enable, `false` to disable |
-| `MAX_DEPTH` | Number | `12` | Maximum traversal depth to prevent stack overflow |
-| `MAX_NODES` | Number | `10000` | Maximum number of nodes to process for performance |
-| `MAX_POLL_COUNT` | Number | `20` | Maximum number of polling attempts |
-| `POLL_INTERVAL` | Number | `500` | Polling interval in milliseconds |
-| `MAX_RETRIES` | Number | `5` | Maximum retry attempts for API requests |
-| `RETRY_DELAY` | Number | `1000` | Initial retry delay in milliseconds |
-| `RETRY_BACKOFF` | Number | `1.5` | Retry backoff multiplier |
-| `FETCH_TIMEOUT` | Number | `10000` | API request timeout in milliseconds |
-| `REGEX_TIMEOUT` | Number | `100` | Regex replacement timeout in milliseconds |
+| `API_URL` | String | `https://aistudio.xiaomimimo.com/open-apis/user/mi/get` | API request URL |
+| `DEFAULT_TIMEZONE` | String | `'Asia/Shanghai'` | Default timezone |
+| `FETCH_TIMEOUT` | Number | `10000` | API request timeout (milliseconds) |
 | `MAX_WATERMARK_LENGTH` | Number | `500` | Maximum watermark text length |
 | `MIN_WATERMARK_LENGTH` | Number | `1` | Minimum watermark text length |
-| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver debounce delay in milliseconds |
-| `RESIZE_DEBOUNCE` | Number | `300` | Resize event debounce delay in milliseconds |
+| `BASE64_MATCH_MIN_LENGTH` | Number | `20` | Base64 match minimum length |
+| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 match maximum length |
+| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | Viewport coverage threshold (90%) for Canvas detection |
+| `MAX_RETRIES` | Number | `5` | Maximum retry attempts for API requests |
+| `PAGE_LOAD_RETRIES` | Number | `3` | Retry attempts after page load |
+| `INITIAL_RETRY_DELAY` | Number | `1000` | Initial retry delay (milliseconds) |
+| `RETRY_BACKOFF_MULTIPLIER` | Number | `1.5` | Retry backoff multiplier |
+| `MAX_POLL_COUNT` | Number | `20` | Maximum polling count |
+| `POLL_INTERVAL` | Number | `500` | Polling interval (milliseconds) |
+| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | Page load wait time (milliseconds) |
+| `MAX_REPEATED_CHARS` | Number | `10` | Maximum repeated characters (security check) |
+| `MAX_REPEATED_SUBSTRINGS` | Number | `5` | Maximum repeated substrings (security check) |
+| `MAX_NESTED_BRACKETS` | Number | `20` | Maximum nested brackets (security check) |
 
 ### Interception Configuration Options
 
 | Option | Type | Default | Description |
-|--------|------|---------|-------------|
+|---------|------|---------|-------------|
 | `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | Enable Canvas API interception |
-| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | Enable CSS style interception (disabled by default) |
-| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | Enable appendChild interception (disabled by default) |
-
-### Performance Optimization Configuration
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | Viewport coverage threshold (90%) for overlay detection |
-| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 match length limit for watermark detection |
-| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | Page load wait time in milliseconds |
-| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | High z-index threshold for overlay detection |
-| `LOW_OPACITY_THRESHOLD` | Number | `1` | Low opacity threshold for overlay detection |
-| `USE_TREE_WALKER` | Boolean | `false` | Use TreeWalker API for DOM traversal (experimental) |
 
 ### Enabling Logs for Debugging
 
@@ -146,204 +134,220 @@ const ENABLE_LOG = true;
 After enabling, the browser console (F12) will output detailed log information, including:
 
 - Watermark detection process
-- DOM change monitoring
 - Canvas interception records
 - Error and warning information
 
-### Performance Optimization Options
-
-For advanced users, the following options can be tuned for better performance:
-
-1. **TreeWalker API**: Set `USE_TREE_WALKER` to `true` to use TreeWalker API for DOM traversal (may improve performance on large pages)
-2. **Debounce Settings**: Adjust `OBSERVER_DEBOUNCE` and `RESIZE_DEBOUNCE` to balance responsiveness and performance
-3. **Node Limits**: Adjust `MAX_NODES` and `MAX_DEPTH` based on page complexity
-
-### Interception Control
-
-The script provides fine-grained control over prototype chain modifications:
-
-- **Canvas Interception**: Enabled by default, intercepts Canvas drawing operations
-- **CSS Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
-- **appendChild Interception**: Disabled by default, can be enabled if needed (may affect page functionality)
-
 ## 🔬 How It Works
 
-### 1. Fetch Watermark Content
+### 1. Fetching Watermark Content
 
-The script automatically calls the API to get the current user's watermark content when it starts:
+The script automatically calls the API to fetch the current user's watermark content when it starts:
 
 ```
 GET https://aistudio.xiaomimimo.com/open-apis/user/mi/get
 ```
 
 API request features:
-- Automatically carries user authentication (cookies)
+- Automatically carries user authentication information (cookies)
 - Automatically sets timezone-related request headers
 - Timeout handling (10 seconds)
 - Error retry mechanism
+- Fallback option: Detect watermark from page if API fails
 
-### 2. Detect Watermarks
+### 2. Canvas Interception
 
-The script detects watermarks on the page through multiple methods:
+The script intercepts Canvas drawing operations to prevent watermark rendering:
 
-#### Text Detection
-- Checks element `textContent`, `innerText`, `innerHTML`
-- Checks form element `value` attributes
-- Checks all HTML attribute values
+#### Intercepted Methods
+- `CanvasRenderingContext2D.fillText()` - Prevent text drawing
+- `CanvasRenderingContext2D.strokeText()` - Prevent stroke text drawing
+- `CanvasRenderingContext2D.drawImage()` - Prevent image drawing
+- `OffscreenCanvasRenderingContext2D` - Also supports OffscreenCanvas
 
-#### Image Detection
-- Checks `<img>` tag `src` attributes
-- Checks CSS `background-image` properties
-- Checks inline styles for background images
+#### Interception Logic
+1. Check if drawing content contains watermark text
+2. If it contains watermark, return directly without executing drawing
+3. If it doesn't contain watermark, execute original drawing method
+4. Fallback to original implementation on error
 
-#### Canvas Interception
-- Intercepts `CanvasRenderingContext2D.fillText()`
-- Intercepts `CanvasRenderingContext2D.strokeText()`
-- Intercepts `CanvasRenderingContext2D.drawImage()`
-- Prevents drawing operations containing watermark content
+### 3. Canvas Cleanup
 
-#### CSS Style Detection
-- Detects full-screen overlay elements
-- Detects fixed-position elements
-- Detects `pointer-events: none` elements
-- Detects high z-index transparent elements
+The script periodically detects and clears suspicious Canvas elements:
 
-### 3. Remove Watermarks
+#### Detection Conditions
+- Canvas covers most of the viewport (>=90%)
+- Canvas uses fixed positioning (fixed or absolute)
+- Canvas has `pointer-events: none` set
 
-Executes corresponding removal operations based on the detected watermark type:
-
-- **Text Watermarks**: Removes or replaces watermark text from DOM nodes
-- **Image Watermarks**: Clears background images or hides/removes elements
-- **Canvas Watermarks**: Prevents drawing or clears canvas
-- **Overlay Watermarks**: Hides or removes overlay elements
+#### Cleanup Operations
+- Use `clearRect()` to clear canvas content
+- Hide Canvas element (display: none)
+- Use WeakSet to avoid duplicate processing
 
 ### 4. Dynamic Monitoring
 
-Uses `MutationObserver` to monitor DOM changes:
+The script monitors page changes to ensure dynamically generated Canvas watermarks are also removed:
 
-- Monitors child node additions and deletions
-- Monitors specific attribute changes (style, src, class, background-image)
-- Only scans changed local nodes to reduce CPU usage
-- Uses debouncing to avoid frequent execution
+#### Monitoring Mechanisms
+- **Polling Detection**: Periodically (every 500ms) detects Canvas elements, up to 20 times
+- **Resize Monitoring**: Re-detects Canvas elements when window size changes
+- **Resource Cleanup**: Cleans up timers and event listeners when page unloads
+
+#### Optimization Strategies
+- WeakSet caching for processed elements, avoiding duplicate processing
+- Limited polling count to reduce unnecessary performance overhead
+- Automatic cleanup of timers and event listeners to prevent memory leaks
 
 ## 🛠️ Technical Implementation
 
 ### Core Architecture
 
 ```
-├── Configuration
-│   ├── ENABLE_LOG (log switch)
-│   └── Watermark content variables
-├── Logging System
-│   ├── logger.log()
-│   ├── logger.warn()
-│   └── logger.error()
-├── Watermark Detection
-│   ├── containsWatermark() - Text matching
-│   ├── elementContainsWatermark() - Element detection
-│   ├── imageContainsWatermark() - Image detection
-│   └── isLikelyWatermarkOverlay() - Overlay detection
-├── Watermark Removal
-│   ├── hideOverlayElement() - Hide overlay
-│   ├── removeWatermark() - Remove watermark element
-│   └── clearLikelyWatermarkCanvases() - Clear watermark canvas
-├── DOM Monitoring
-│   ├── detectAndHideOverlays() - Detect and hide overlays
-│   ├── detectAndRemoveWatermarks() - Detect and remove watermarks
-│   └── setupObserver() - Set up MutationObserver
-└── Canvas Interception
-    ├── interceptCanvas() - Intercept Canvas API
-    └── OffscreenCanvas support
+├── Configuration System (CONFIG)
+│   ├── Log Configuration
+│   ├── API Configuration
+│   ├── Watermark Text Configuration
+│   ├── Canvas Detection Configuration
+│   ├── Retry Configuration
+│   ├── Polling Configuration
+│   ├── Page Load Configuration
+│   ├── Security Configuration
+│   └── Canvas Interception Configuration
+├── Logging System (logger)
+│   ├── log()
+│   ├── warn()
+│   ├── error()
+│   ├── stat() (error statistics)
+│   └── getStats()
+├── State Management (state)
+│   ├── watermarkText
+│   ├── watermarkCandidates
+│   ├── processedElements
+│   ├── pollTimer
+│   └── resizeHandler
+├── Utility Functions
+│   ├── formatErrorContext()
+│   ├── containsWatermark()
+│   ├── isSafeWatermarkText()
+│   ├── rebuildWatermarkCandidates()
+│   └── cleanup()
+├── Canvas Interception
+│   ├── interceptCanvas()
+│   ├── interceptMethod()
+│   ├── interceptDrawImage()
+│   └── OffscreenCanvas Support
+├── Canvas Cleanup
+│   └── clearSuspectedWatermarkCanvases()
+├── API Requests
+│   ├── fetchWatermark()
+│   ├── detectWatermarkFromPage()
+│   └── fetchWatermarkWithRetry()
+└── Main Flow
+    ├── startWatermarkRemoval()
+    └── main()
 ```
 
 ### Performance Optimization Strategies
 
-1. **Debouncing**: Uses `debounce()` function to avoid frequent execution
-2. **WeakSet Caching**: Uses WeakSet to store processed elements and prevent memory leaks
-3. **Depth Limiting**: DOM traversal maximum depth limited to 10-12 levels
-4. **Local Scanning**: Only scans changed local nodes instead of full-page scans
-5. **Element Caching**: Avoids processing the same element repeatedly
+1. **WeakSet Caching**: Uses WeakSet to store processed elements, avoiding memory leaks
+2. **Optional Chaining**: Uses `?.` operator to safely access nested properties, reducing unnecessary checks
+3. **Nullish Coalescing**: Uses `??` operator to provide default values, simplifying code
+4. **Arrow Functions**: Concise function syntax and lexical `this` binding
+5. **Object Spread Operator**: Immutable operations, avoiding side effects
+6. **Limited Polling Count**: Avoids infinite polling, reducing performance overhead
+7. **Automatic Resource Cleanup**: Cleans up timers and event listeners when page unloads
 
 ### Error Handling
 
-- All DOM operations have try-catch protection
+- All async operations have try-catch protection
 - API requests have timeout handling (10 seconds)
-- JSON parsing errors are captured and logged
-- Detailed error logs facilitate troubleshooting
+- JSON parsing errors are caught and logged
+- Canvas interception errors fallback to original implementation
+- Detailed error logs for easy troubleshooting
+- Error statistics feature for monitoring script running status
+
+### Modern JavaScript Features
+
+- **ES6+ Syntax**: Uses const/let, arrow functions, template strings, etc.
+- **Optional Chaining**: `?.` operator for safe property access
+- **Nullish Coalescing**: `??` operator for default values
+- **Destructuring**: Concise object and array destructuring
+- **Promise/async-await**: Elegant async handling
+- **WeakSet/WeakMap**: Weak reference collections to prevent memory leaks
 
 ## ❓ FAQ
 
-### Q1: Script won't install?
+### Q1: Script cannot be installed?
 
-**Solutions**:
-- Make sure Tampermonkey extension is installed
-- Check if the browser supports the script
+**Solution**:
+- Ensure Tampermonkey extension is installed
+- Check if browser supports the script
 - Try refreshing the page and reinstalling
 - Check for conflicts with other scripts
 
-### Q2: Watermark not removed?
+### Q2: Watermark is not removed?
 
-**Solutions**:
+**Solution**:
 1. Open browser console (F12)
 2. Set `ENABLE_LOG` to `true`
-3. Refresh the page and check logs
-4. Verify script is executing correctly
+3. Refresh page to view logs
+4. Confirm script is executing correctly
 
-### Q3: Page displays incorrectly?
+### Q3: Page displays abnormally?
 
-**Solutions**:
+**Solution**:
 - Check for conflicts with other browser extensions
-- Try using incognito mode
+- Try using in incognito mode
 - Clear browser cache and retry
 
 ### Q4: API request failed?
 
-**Solutions**:
-- Make sure you're logged in to Xiaomi MiMo Studio
+**Solution**:
+- Ensure you are logged in to Xiaomi MiMo Studio
 - Check network connection
-- Check console error messages
+- View console error information
 
 ### Q5: Performance issues?
 
-**Solutions**:
-- The script is optimized with low CPU usage
-- If problems persist, try:
-  - Disabling other extensions
-  - Using the latest browser version
-  - Clearing browser cache
+**Solution**:
+- The script is optimized, CPU usage is very low
+- If you still have issues, try:
+  - Disable other extensions
+  - Use the latest version browser
+  - Clear browser cache
 
 ## 🔧 Troubleshooting
 
-### Enabling Debug Mode
+### Enable Debug Mode
 
 1. Edit the script, change `ENABLE_LOG` to `true`
 2. Open browser console (F12 -> Console)
-3. Refresh the page and view log output
+3. Refresh page to view log output
 
-### Checking Script Status
+### Check if Script is Running
 
-Enter in the console:
+Enter in console:
 ```javascript
-console.log('Script status:', typeof WATERMARK_TEXT !== 'undefined' ? 'Running' : 'Not running');
+console.log('Script status:', typeof WATERMARK_TEXT !== 'undefined' ? 'running' : 'not running');
 ```
 
-### Checking Watermark Content
+### Check Watermark Content
 
 ```javascript
 // Execute in console
-console.log('Current watermark:', WATERMARK_TEXT);
+console.log('Current watermark content:', WATERMARK_TEXT);
 console.log('Watermark candidates:', WATERMARK_TEXT_CANDIDATES);
 ```
 
-### Resetting Script Status
+### Reset Script State
 
 1. Disable the script
 2. Refresh the page
 3. Re-enable the script
 
-### Reporting Issues
+### Report Issues
 
-When encountering problems, please provide:
+When encountering issues, please provide the following information:
 
 1. Browser version and operating system
 2. Tampermonkey version
@@ -355,11 +359,11 @@ When encountering problems, please provide:
 
 | Browser | Version | Status |
 |---------|---------|--------|
-| Chrome | 90+ | ✅ Full Support |
-| Edge | 90+ | ✅ Full Support |
-| Firefox | 88+ | ✅ Full Support |
-| Safari | 14+ | ✅ Full Support |
-| Opera | 76+ | ✅ Full Support |
+| Chrome | 90+ | ✅ Fully Supported |
+| Edge | 90+ | ✅ Fully Supported |
+| Firefox | 88+ | ✅ Fully Supported |
+| Safari | 14+ | ✅ Fully Supported |
+| Opera | 76+ | ✅ Fully Supported |
 
 ### System Requirements
 
@@ -369,113 +373,146 @@ When encountering problems, please provide:
 
 ## 📝 Version History
 
+### v1.4.0 (2026-01-20)
+- **Architecture Refactoring**:
+  - Removed all non-Canvas related code, focused on Canvas watermark interception and cleanup
+  - Removed DOM traversal, CSS interception, MutationObserver, and other deprecated features
+  - Simplified code structure, from 1545 lines to 559 lines
+- **Code Quality Improvements**:
+  - Extracted all magic numbers to CONFIG constants for better maintainability
+  - Applied modern JavaScript features (optional chaining, nullish coalescing, arrow functions, etc.)
+  - Centralized state management using state object for unified management
+  - Extracted common logic to reduce code duplication (interceptMethod, interceptDrawImage)
+  - Organized code by functional modules (configuration, logging, utilities, Canvas interception, API requests, etc.)
+- **Performance Optimization**:
+  - Uses WeakSet to store processed elements, automatic garbage collection
+  - Uses optional chaining and nullish coalescing operators to reduce unnecessary null checks
+  - Limited polling count to reduce unnecessary performance overhead
+  - Automatic cleanup of timers and event listeners to prevent memory leaks
+- **Security Improvements**:
+  - Uses `Object.prototype.hasOwnProperty.call()` instead of direct property access
+  - Regular expressions use template strings for dynamic construction, avoiding hardcoding
+  - Retains watermark text security validation to prevent ReDoS attacks
+- **Configuration Optimization**:
+  - Added new configuration options: API_URL, DEFAULT_TIMEZONE, etc.
+  - Added new configuration options: BASE64_MATCH_MIN_LENGTH, PAGE_LOAD_RETRIES, INITIAL_RETRY_DELAY, etc.
+  - Added new security configuration options: MAX_REPEATED_CHARS, MAX_REPEATED_SUBSTRINGS, MAX_NESTED_BRACKETS
+  - Removed deprecated configuration options: MAX_DEPTH, MAX_NODES, OBSERVER_DEBOUNCE, etc.
+- **Documentation Updates**:
+  - Updated features to reflect Canvas-focused design
+  - Updated configuration options, removed deprecated options
+  - Updated how it works section, focused on Canvas interception and cleanup
+  - Updated technical implementation to reflect new code architecture
+
 ### v1.3.8 (2026-01-07)
 - **Security Fixes**:
-  - Fixed XSS security vulnerability by using innerHTML.replace() for watermark text processing
-  - Added watermark text length limit (100 characters) and safety validation to prevent ReDoS attacks
-  - Enhanced error handling with SecurityError type and detailed error context information
-- **Performance Optimizations**:
-  - Optimized style cache cleanup strategy to reduce unnecessary querySelectorAll calls
-  - Implemented intelligent polling mechanism: first 3 polls always execute, subsequent polls only execute when DOM changes detected
-  - Added mutationCount global variable for zero-overhead DOM change detection
+  - Fixed XSS security vulnerability, using innerHTML.replace() to handle watermark text
+  - Added watermark text length limit (100 characters) and security validation to prevent ReDoS attacks
+  - Enhanced error handling, added SecurityError type and detailed error context information
+- **Performance Optimization**:
+  - Optimized style cache cleanup strategy, reducing unnecessary querySelectorAll calls
+  - Implemented smart polling mechanism: first 3 polls always execute detection, subsequent only when DOM changes occur
+  - Added mutationCount global variable to implement zero-overhead DOM change detection
 - **Memory Management**:
   - Added globalObserver reference and cleanup mechanism to prevent memory leaks
-  - Automatically cleanup MutationObserver on page unload
+  - Automatically cleans up MutationObserver when page unloads
 - **Code Quality**:
-  - Eliminated magic numbers by extracting HIGH_ZINDEX_THRESHOLD and LOW_OPACITY_THRESHOLD to CONFIG
+  - Eliminated magic numbers, extracted HIGH_ZINDEX_THRESHOLD and LOW_OPACITY_THRESHOLD to CONFIG
   - Added detailed JSDoc comments for key functions (isLikelyWatermarkOverlay, removeWatermark)
-  - Improved log configuration to support dynamic control via localStorage and URL parameters
+  - Improved log configuration, supports dynamic control via localStorage and URL parameters
 - **Bug Fixes**:
-  - Fixed issue where watermarks were not removed on initial page load
-  - Fixed inaccurate watermark detection caused by over-simplified style cache cleanup
+  - Fixed issue where watermark couldn't be removed on initial load
+  - Fixed style cache cleanup oversimplification causing inaccurate detection
 - **Documentation Updates**:
-  - Updated README with new configuration items
-  - Added intelligent polling sequence diagram
+  - Updated README, added new configuration options description
+  - Added smart polling sequence diagram
   - Updated documentation version to v1.3.8
 
 ### v1.3.7 (2026-01-05)
 - **Code Quality Improvements**:
   - Refactored `detectAndRemoveWatermarks` function into 6 sub-functions for better maintainability
   - Extracted magic numbers to CONFIG object (VIEWPORT_COVERAGE_THRESHOLD, BASE64_MATCH_MAX_LENGTH, PAGE_LOAD_WAIT_TIME)
-  - Added regex expression caching to avoid repeated compilation
-  - Enhanced error logging with context information (error, stack, timestamp, URL, user agent)
+  - Added regex caching to avoid repeated compilation
+  - Enhanced error logging, added context information (error, stack, timestamp, URL, user agent)
   - Added configuration validation function to prevent configuration errors
-  - Renamed `clearLikelyWatermarkCanvases` to `clearSuspectedWatermarkCanvases` for better semantics
-- **Performance Optimizations**:
+  - Renamed `clearLikelyWatermarkCanvases` to `clearSuspectedWatermarkCanvases` for clearer semantics
+- **Performance Optimization**:
   - Implemented TreeWalker API option for DOM traversal (experimental feature)
-  - Optimized style cache invalidation strategy with fine-grained clearing (attribute, childList, default)
-  - Improved debounce logic in MutationObserver to ensure performance optimization
+  - Optimized style cache invalidation strategy, supports fine-grained cache cleanup (attribute, childList, default)
+  - Fixed debounce logic in MutationObserver to ensure performance optimization takes effect
 - **Bug Fixes**:
-  - Fixed debounce logic issue that caused frequent scanning
-  - Fixed configuration validation to include all new config items
-  - Fixed TreeWalker recursion issue that could cause node processing limit issues
+  - Fixed debounce logic issue causing frequent scanning
+  - Fixed configuration validation to include all new configuration items
+  - Fixed TreeWalker recursive call issue that could cause node processing limit failure
+- **Documentation Updates**:
+  - Updated sequence diagram documentation to reflect all code improvements
 
 ### v1.3.6 (2026-01-04)
-- Code Refactoring: Fixed code formatting issues, unified indentation and blank lines
-- Function Optimization: Standardized startWatermarkRemoval function definition, fixed scope issues
-- Performance Optimization: Optimized containsWatermark function, removed redundant filtering logic, pre-filtered in rebuildWatermarkCandidates
-- Performance Optimization: Improved regex replacement timeout check logic, moved timeout check to before and after the entire operation
-- Code Refactoring: Split isLikelyWatermarkOverlay function into 8 helper functions for better maintainability
-- Cache Optimization: Improved style cache cleanup logic, ensures clearing element caches in Shadow Root
-- API Optimization: Simplified API request headers from 12 to 3, reducing risk of being identified as a crawler
-- Feature Added: Added configuration switches to control prototype chain modifications (ENABLE_CANVAS_INTERCEPT, ENABLE_CSS_INTERCEPT, ENABLE_APPEND_CHILD_INTERCEPT)
-- Documentation Updated: Updated sequence diagram documentation to reflect all code improvements
+- **Code Refactoring**: Fixed code formatting issues, unified indentation and blank lines
+- **Function Optimization**: Normalized startWatermarkRemoval function definition, fixed scope issues
+- **Performance Optimization**: Optimized containsWatermark function, removed duplicate filtering logic, pre-filter in rebuildWatermarkCandidates
+- **Performance Optimization**: Improved regex replacement timeout check logic, moved timeout check to before entire operation
+- **Code Refactoring**: Split isLikelyWatermarkOverlay function, created 8 helper functions for better maintainability
+- **Cache Optimization**: Improved style cache cleanup logic to ensure element cache cleanup in Shadow Root
+- **API Optimization**: Simplified API request headers, reduced from 12 to 3, lowering risk of being identified as crawler
+- **Feature Addition**: Added configuration switches to control prototype chain modifications (ENABLE_CANVAS_INTERCEPT, ENABLE_CSS_INTERCEPT, ENABLE_APPEND_CHILD_INTERCEPT)
+- **Documentation Updates**: Updated sequence diagram documentation to reflect all code improvements
 
 ### v1.3.5 (2025-12-30)
-- Security fix: Fixed memory leak risk by adding cleanup mechanism for timers and event listeners
-- Security fix: Fixed prototype pollution risk by using Object.defineProperty to reduce impact on third-party code
-- Security fix: Fixed recursion depth issue by converting recursion to iteration and adding node count limits
-- Performance: Added style caching mechanism to reduce getComputedStyle calls
-- Security fix: Fixed regex DoS risk by adding safety validation and timeout protection
-- Code improvement: Added configuration constants object to centrally manage all configuration parameters
-- Error handling: Enhanced network error handling and API response validation
-- Edge cases: Improved handling for zero viewport size and proper handling of zIndex as 'auto'
-- Input validation: Added input validation for critical functions to prevent issues from invalid inputs
+- **Security Fixes**: Fixed memory leak risk, added cleanup mechanism for timers and event listeners
+- **Security Fixes**: Fixed prototype chain pollution risk, using Object.defineProperty to reduce impact on third-party code
+- **Security Fixes**: Fixed recursion depth issue, changed recursion to iteration, added node count limit
+- **Performance Optimization**: Added style caching mechanism to reduce getComputedStyle calls
+- **Security Fixes**: Fixed regex denial of service risk, added security validation and timeout protection
+- **Code Improvements**: Added configuration constant object, centralized management of all configuration parameters
+- **Error Handling**: Enhanced network error handling and API response validation
+- **Edge Cases**: Improved handling of viewport size being 0, correctly handles zIndex being 'auto'
+- **Input Validation**: Added input validation for key functions to prevent invalid input causing issues
 
 ### v1.3.4 (2025-12-29)
-- Fix: Fixed watermark detection timing issue by changing @run-at from document-start to document-end
-- Feature: Added periodic polling detection mechanism (every 500ms for 10 seconds)
-- Feature: Added window resize listener to re-detect watermarks on layout changes
-- Improvement: Enhanced error handling with error statistics functionality
-- Optimization: Merged duplicate detection functions for better code logic
-- Optimization: Optimized DOM traversal performance by reducing getComputedStyle calls
+- **Fix**: Fixed watermark detection timing issue, changed @run-at from document-start to document-end
+- **Addition**: Added periodic polling detection mechanism (every 500ms within 10 seconds)
+- **Addition**: Added window resize monitoring to re-detect when layout changes
+- **Improvement**: Improved error handling, added error statistics feature
+- **Optimization**: Optimized code logic, merged duplicate detection functions
+- **Optimization**: Optimized DOM traversal performance, reduced getComputedStyle calls
 
 ### v1.3.3 (2025-12-24)
-- Performance: Removed redundant DOM scans, cleanup process now executes once
-- Code: Removed duplicate initialization calls, streamlined main flow
-- Error handling: Added debug logs for critical operations to aid troubleshooting
+- **Performance Optimization**: Removed duplicate DOM scans, cleanup process changed to single execution
+- **Code Optimization**: Removed duplicate initialization calls, streamlined main process
+- **Exception Handling Improvement**: Added debug logs for key operations for easier troubleshooting
 
 ### v1.3.2
-- Use the browser timezone for the `x-timezone` request header
+- `x-timezone` request header changed to automatically get based on browser timezone
 
 ### v1.3.1
-- Improved Windows initial watermark flash: early hide/cleanup of fullscreen Canvas watermark overlay
-- Improved cleanup timing: handle overlay before watermark text is fetched, reducing reliance on forced re-render
-- Performance: bounded requestAnimationFrame cleanup loop and debounced MutationObserver callbacks to avoid sustained high CPU usage
+- **Optimization**: Fixed first screen watermark flashing issue on Windows: added early hiding and cleanup for full-screen Canvas watermark overlay layer
+- **Optimization**: Improved cleanup trigger timing: process overlay layer before fetching watermark content to reduce dependency on page repaint
+- **Performance Optimization**: Cleanup process uses requestAnimationFrame chain with upper limit
 
 ### v1.3.0
-- Optimized DOM observation logic to scan only the local subtree of changed nodes, significantly reducing CPU usage
-- Removed periodic full-page scans and rely on incremental detection via MutationObserver for better performance and responsiveness
+- **Optimization**: Optimized DOM monitoring logic, only scans changed local nodes
+- **Removed**: Periodic full-page scanning, relies on MutationObserver for incremental detection
 
 ### v1.2.0
-- Added global log switch, disabled by default
-- Unified log output format
+- **Addition**: Added global log switch, disabled by default
+- **Addition**: Unified log output format
 
 ### v1.1.0
-- Added dynamic watermark fetching functionality
-- Added retry mechanism and page detection fallback
-- Improved error handling and log output
+- **Addition**: Added dynamic watermark fetching feature
+- **Addition**: Added retry mechanism and page detection fallback
+- **Improvement**: Improved error handling and log output
 
 ### v1.0.0
-- Initial release
-- Supports detection and removal of multiple watermark forms
+- **Initial Release**: First version release
+- **Support**: Supports detection and removal of multiple watermark forms
 
 ## ⚠️ Notes
 
 - This script is for learning and research purposes only
-- Please ensure compliance with the relevant website's terms of use before using
-- The script automatically fetches the watermark content of the currently logged-in user, no manual configuration required
-- Regularly update the script to get the latest features and fixes
+- Please comply with the relevant website's terms of service before using
+- The script automatically fetches the current logged user's watermark content, no manual configuration required
+- Update the script regularly to get the latest features and fixes
 - If you encounter issues, please check the FAQ and troubleshooting sections first
 
 ## 📄 License
@@ -485,7 +522,7 @@ This project is open source under the MIT License.
 ```
 MIT License
 
-Copyright (c) 2025 AlanWang
+Copyright (c) 2026 AlanWang
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -516,7 +553,7 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Submit a Pull Request
 
-### Contribution Guidelines
+### Contributing Guidelines
 
 - Follow the project's code style
 - Ensure code passes lint checks
@@ -528,8 +565,8 @@ Contributions are welcome! Please follow these steps:
 - [Xiaomi MiMo Studio](https://aistudio.xiaomimimo.com/)
 - [Tampermonkey Official Website](https://www.tampermonkey.net/)
 - [Greasy Fork Script Page](https://greasyfork.org/zh-CN/scripts/559263-xiaomi-mimo-studio-%E5%8E%BB%E6%B0%B4%E5%8D%B0)
-- [GitHub Project](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover)
-- [Issue Report](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/issues)
+- [GitHub Project Repository](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover)
+- [Issue Tracker](https://github.com/wang93wei/Xiaomi-MiMo-Studio-Watermark-Remover/issues)
 
 ## ⭐ Star History
 
@@ -537,4 +574,4 @@ Contributions are welcome! Please follow these steps:
 
 ---
 
-**Thank you for using!** If this script helps you, please give the project a Star to show your support.
+**Thank you for using!** If this script helps you, please give the project a Star to support it.

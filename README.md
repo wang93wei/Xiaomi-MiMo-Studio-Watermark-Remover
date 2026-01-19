@@ -37,13 +37,15 @@
 ## ✨ 功能特性
 
 - ✅ **动态获取水印**：自动从 API 获取当前用户的水印内容，无需手动配置
-- ✅ **多种检测方式**：支持文本、图片、Canvas、CSS 等多种水印形式的检测和移除
-- ✅ **实时监听**：使用 MutationObserver 监听 DOM 变化，自动检测并移除动态添加的水印
-- ✅ **性能优化**：防抖机制、元素缓存、检测深度限制等优化措施
+- ✅ **Canvas 拦截**：拦截 Canvas 绘制操作，阻止水印文本和图片的绘制
+- ✅ **Canvas 清理**：自动检测并清空覆盖大部分视口的可疑 Canvas 元素
+- ✅ **实时监听**：监听窗口 resize 事件，确保布局变化时重新检测
+- ✅ **定期轮询**：定期检测动态生成的 Canvas 水印
 - ✅ **日志控制**：可配置的日志开关，默认关闭，需要调试时可开启
 - ✅ **异常处理**：完善的错误处理和日志记录，便于问题排查
 - ✅ **零依赖**：纯原生 JavaScript 实现，无外部依赖
 - ✅ **内存优化**：使用 WeakSet 避免内存泄漏
+- ✅ **现代语法**：使用 ES6+ 特性，代码简洁高效
 
 ## 🚀 安装方法
 
@@ -102,38 +104,30 @@ const ENABLE_LOG = false;
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `ENABLE_LOG` | Boolean | `false` | 控制是否输出调试日志，`true` 启用，`false` 关闭 |
-| `MAX_DEPTH` | Number | `12` | 最大遍历深度，防止调用栈溢出 |
-| `MAX_NODES` | Number | `10000` | 最大处理节点数，防止性能问题 |
-| `MAX_POLL_COUNT` | Number | `20` | 最大轮询次数 |
-| `POLL_INTERVAL` | Number | `500` | 轮询间隔（毫秒） |
-| `MAX_RETRIES` | Number | `5` | API 请求最大重试次数 |
-| `RETRY_DELAY` | Number | `1000` | 初始重试延迟（毫秒） |
-| `RETRY_BACKOFF` | Number | `1.5` | 重试退避倍数 |
+| `API_URL` | String | `https://aistudio.xiaomimimo.com/open-apis/user/mi/get` | API 请求地址 |
+| `DEFAULT_TIMEZONE` | String | `'Asia/Shanghai'` | 默认时区 |
 | `FETCH_TIMEOUT` | Number | `10000` | API 请求超时（毫秒） |
-| `REGEX_TIMEOUT` | Number | `100` | 正则替换超时（毫秒） |
 | `MAX_WATERMARK_LENGTH` | Number | `500` | 水印文本最大长度 |
 | `MIN_WATERMARK_LENGTH` | Number | `1` | 水印文本最小长度 |
-| `OBSERVER_DEBOUNCE` | Number | `50` | MutationObserver 防抖延迟（毫秒） |
-| `RESIZE_DEBOUNCE` | Number | `300` | resize 事件防抖延迟（毫秒） |
+| `BASE64_MATCH_MIN_LENGTH` | Number | `20` | Base64 匹配最小长度 |
+| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 匹配最大长度 |
+| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | 视口覆盖阈值（90%）用于 Canvas 检测 |
+| `MAX_RETRIES` | Number | `5` | API 请求最大重试次数 |
+| `PAGE_LOAD_RETRIES` | Number | `3` | 页面加载后重试次数 |
+| `INITIAL_RETRY_DELAY` | Number | `1000` | 初始重试延迟（毫秒） |
+| `RETRY_BACKOFF_MULTIPLIER` | Number | `1.5` | 重试退避倍数 |
+| `MAX_POLL_COUNT` | Number | `20` | 最大轮询次数 |
+| `POLL_INTERVAL` | Number | `500` | 轮询间隔（毫秒） |
+| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | 页面加载等待时间（毫秒） |
+| `MAX_REPEATED_CHARS` | Number | `10` | 最大重复字符数（安全检查） |
+| `MAX_REPEATED_SUBSTRINGS` | Number | `5` | 最大重复子串数（安全检查） |
+| `MAX_NESTED_BRACKETS` | Number | `20` | 最大嵌套括号数（安全检查） |
 
 ### 拦截配置选项
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `ENABLE_CANVAS_INTERCEPT` | Boolean | `true` | 启用 Canvas API 拦截 |
-| `ENABLE_CSS_INTERCEPT` | Boolean | `false` | 启用 CSS 样式拦截（默认关闭） |
-| `ENABLE_APPEND_CHILD_INTERCEPT` | Boolean | `false` | 启用 appendChild 拦截（默认关闭） |
-
-### 性能优化配置
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `VIEWPORT_COVERAGE_THRESHOLD` | Number | `0.9` | 视口覆盖阈值（90%）用于覆盖层检测 |
-| `BASE64_MATCH_MAX_LENGTH` | Number | `50` | Base64 匹配长度上限用于水印检测 |
-| `PAGE_LOAD_WAIT_TIME` | Number | `2000` | 页面加载等待时间（毫秒） |
-| `HIGH_ZINDEX_THRESHOLD` | Number | `100` | 高 z-index 阈值用于覆盖层检测 |
-| `LOW_OPACITY_THRESHOLD` | Number | `1` | 低透明度阈值用于覆盖层检测 |
-| `USE_TREE_WALKER` | Boolean | `false` | 使用 TreeWalker API 进行 DOM 遍历（实验性） |
 
 ### 启用日志进行调试
 
@@ -146,25 +140,8 @@ const ENABLE_LOG = true;
 启用后，浏览器控制台（F12）会输出详细的日志信息，包括：
 
 - 水印检测过程
-- DOM 变化监听
 - Canvas 拦截记录
 - 错误和警告信息
-
-### 性能优化选项
-
-高级用户可以调整以下选项以获得更好的性能：
-
-1. **TreeWalker API**：设置 `USE_TREE_WALKER` 为 `true` 使用 TreeWalker API 进行 DOM 遍历（在大页面上可能提升性能）
-2. **防抖设置**：调整 `OBSERVER_DEBOUNCE` 和 `RESIZE_DEBOUNCE` 以平衡响应性和性能
-3. **节点限制**：根据页面复杂度调整 `MAX_NODES` 和 `MAX_DEPTH`
-
-### 拦截控制
-
-脚本提供对原型链修改的精细控制：
-
-- **Canvas 拦截**：默认启用，拦截 Canvas 绘制操作
-- **CSS 拦截**：默认关闭，需要时可启用（可能影响页面功能）
-- **appendChild 拦截**：默认关闭，需要时可启用（可能影响页面功能）
 
 ## 🔬 工作原理
 
@@ -181,50 +158,51 @@ API 请求特点：
 - 自动设置时区相关的请求头
 - 超时处理（10秒）
 - 错误重试机制
+- 备选方案：API 失败时从页面检测水印
 
-### 2. 检测水印
+### 2. Canvas 拦截
 
-脚本通过多种方式检测页面中的水印：
+脚本拦截 Canvas 绘制操作，阻止水印的绘制：
 
-#### 文本检测
-- 检查元素的 `textContent`、`innerText`、`innerHTML`
-- 检查表单元素的 `value` 属性
-- 检查所有 HTML 属性的值
+#### 拦截的方法
+- `CanvasRenderingContext2D.fillText()` - 阻止文本绘制
+- `CanvasRenderingContext2D.strokeText()` - 阻止描边文本绘制
+- `CanvasRenderingContext2D.drawImage()` - 阻止图片绘制
+- `OffscreenCanvasRenderingContext2D` - 同样支持 OffscreenCanvas
 
-#### 图片检测
-- 检查 `<img>` 标签的 `src` 属性
-- 检查 CSS 的 `background-image` 属性
-- 检查内联样式中的背景图片
+#### 拦截逻辑
+1. 检查绘制内容是否包含水印文本
+2. 如果包含水印，直接返回，不执行绘制
+3. 如果不包含水印，执行原始绘制方法
+4. 发生错误时回退到原始实现
 
-#### Canvas 拦截
-- 拦截 `CanvasRenderingContext2D.fillText()`
-- 拦截 `CanvasRenderingContext2D.strokeText()`
-- 拦截 `CanvasRenderingContext2D.drawImage()`
-- 阻止包含水印内容的绘制操作
+### 3. Canvas 清理
 
-#### CSS 样式检测
-- 检测全屏覆盖层元素
-- 检测固定定位的元素
-- 检测 `pointer-events: none` 的元素
-- 检测高 z-index 的透明元素
+脚本定期检测并清空可疑的 Canvas 元素：
 
-### 3. 移除水印
+#### 检测条件
+- Canvas 覆盖大部分视口（>=90%）
+- Canvas 使用固定定位（fixed 或 absolute）
+- Canvas 设置了 `pointer-events: none`
 
-根据检测到的水印类型，执行相应的移除操作：
-
-- **文本水印**：从 DOM 节点中移除或替换水印文本
-- **图片水印**：清除背景图片或隐藏/移除元素
-- **Canvas 水印**：阻止绘制或清空画布
-- **覆盖层水印**：隐藏或移除覆盖层元素
+#### 清理操作
+- 使用 `clearRect()` 清空画布内容
+- 隐藏 Canvas 元素（display: none）
+- 使用 WeakSet 避免重复处理
 
 ### 4. 动态监听
 
-使用 `MutationObserver` 监听 DOM 变化：
+脚本监听页面变化，确保动态生成的水印也能被移除：
 
-- 监听子节点的添加和删除
-- 监听特定属性变化（style、src、class、background-image）
-- 仅扫描变化的局部节点，降低 CPU 占用
-- 使用防抖机制，避免频繁执行
+#### 监听机制
+- **轮询检测**：定期（每500ms）检测 Canvas 元素，持续20次
+- **resize 监听**：窗口大小改变时重新检测 Canvas 元素
+- **资源清理**：页面卸载时清理定时器和事件监听器
+
+#### 优化策略
+- WeakSet 缓存已处理元素，避免重复处理
+- 限制轮询次数，减少不必要的性能开销
+- 自动清理定时器和事件监听器，防止内存泄漏
 
 ## 🛠️ 技术实现
 
@@ -233,43 +211,68 @@ API 请求特点：
 ```
 ├── 配置文件
 │   ├── ENABLE_LOG (日志开关)
-│   └── 水印内容变量
+│   ├── API_URL (API地址)
+│   └── 各种阈值和限制参数
 ├── 日志系统
 │   ├── logger.log()
 │   ├── logger.warn()
-│   └── logger.error()
-├── 水印检测
-│   ├── containsWatermark() - 文本匹配
-│   ├── elementContainsWatermark() - 元素检测
-│   ├── imageContainsWatermark() - 图片检测
-│   └── isLikelyWatermarkOverlay() - 覆盖层检测
-├── 水印移除
-│   ├── hideOverlayElement() - 隐藏覆盖层
-│   ├── removeWatermark() - 移除水印元素
-│   └── clearLikelyWatermarkCanvases() - 清空水印画布
-├── DOM 监听
-│   ├── detectAndHideOverlays() - 检测并隐藏覆盖层
-│   ├── detectAndRemoveWatermarks() - 检测并移除水印
-│   └── setupObserver() - 设置 MutationObserver
-└── Canvas 拦截
-    ├── interceptCanvas() - 拦截 Canvas API
-    └── OffscreenCanvas 支持
+│   ├── logger.error()
+│   └── logger.stat() (错误统计)
+├── 状态管理
+│   ├── state.watermarkText (水印文本)
+│   ├── state.watermarkCandidates (水印候选列表)
+│   ├── state.processedElements (已处理元素缓存)
+│   ├── state.pollTimer (轮询定时器)
+│   └── state.resizeHandler (resize事件处理器)
+├── 工具函数
+│   ├── formatErrorContext() - 格式化错误信息
+│   ├── containsWatermark() - 检查文本是否包含水印
+│   ├── isSafeWatermarkText() - 验证水印文本安全性
+│   ├── rebuildWatermarkCandidates() - 重建水印候选列表
+│   └── cleanup() - 清理资源
+├── Canvas 拦截
+│   ├── interceptCanvas() - 拦截 Canvas API
+│   ├── interceptMethod() - 通用方法拦截器
+│   ├── interceptDrawImage() - 图片绘制拦截器
+│   └── OffscreenCanvas 支持
+├── Canvas 清理
+│   └── clearSuspectedWatermarkCanvases() - 清空可疑 Canvas
+├── API 请求
+│   ├── fetchWatermark() - 获取水印内容
+│   ├── detectWatermarkFromPage() - 从页面检测水印
+│   └── fetchWatermarkWithRetry() - 带重试的获取
+└── 主流程
+    ├── startWatermarkRemoval() - 启动水印移除
+    └── main() - 主函数
 ```
 
 ### 性能优化策略
 
-1. **防抖机制**：使用 `debounce()` 函数，避免频繁执行
-2. **WeakSet 缓存**：使用 WeakSet 存储已处理元素，避免内存泄漏
-3. **深度限制**：DOM 遍历最大深度限制为 10-12 层
-4. **局部扫描**：仅扫描变化的局部节点，而非全量扫描
-5. **元素缓存**：避免重复处理同一元素
+1. **WeakSet 缓存**：使用 WeakSet 存储已处理元素，避免内存泄漏
+2. **可选链操作符**：使用 `?.` 安全访问嵌套属性，减少不必要的检查
+3. **空值合并运算符**：使用 `??` 提供默认值，简化代码
+4. **箭头函数**：简洁的函数语法和词法 this 绑定
+5. **对象展开运算符**：不可变操作，避免副作用
+6. **限制轮询次数**：避免无限轮询，减少性能开销
+7. **自动资源清理**：页面卸载时清理定时器和事件监听器
 
 ### 错误处理
 
-- 所有 DOM 操作都有 try-catch 保护
+- 所有异步操作都有 try-catch 保护
 - API 请求有超时处理（10秒）
 - JSON 解析错误会被捕获和记录
+- Canvas 拦截错误会回退到原始实现
 - 详细的错误日志便于问题排查
+- 错误统计功能，便于监控脚本运行状态
+
+### 现代JavaScript特性
+
+- **ES6+ 语法**：使用 const/let、箭头函数、模板字符串等
+- **可选链**：`?.` 操作符安全访问属性
+- **空值合并**：`??` 操作符提供默认值
+- **解构赋值**：简洁的对象和数组解构
+- **Promise/async-await**：优雅的异步处理
+- **WeakSet/WeakMap**：避免内存泄漏的弱引用集合
 
 ## ❓ 常见问题
 
@@ -368,6 +371,38 @@ console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
 - Tampermonkey 扩展
 
 ## 📝 版本历史
+
+### v1.4.0 (2026-01-20)
+- **架构重构**：
+  - 移除所有非Canvas相关代码，专注于Canvas水印拦截和清理
+  - 移除DOM遍历、CSS拦截、MutationObserver等功能
+  - 简化代码结构，从1545行精简到559行
+- **代码质量改进**：
+  - 提取所有魔法数字到CONFIG常量，提高可维护性
+  - 应用现代JavaScript特性（可选链、空值合并、箭头函数等）
+  - 集中状态管理，使用state对象统一管理所有状态
+  - 提取公共逻辑，减少重复代码（interceptMethod、interceptDrawImage）
+  - 按功能模块化组织代码（配置、日志、工具、Canvas拦截、API请求等）
+- **性能优化**：
+  - 使用WeakSet存储已处理元素，自动垃圾回收
+  - 使用可选链和空值合并运算符，减少不必要的null检查
+  - 限制轮询次数，减少不必要的性能开销
+  - 自动清理定时器和事件监听器，防止内存泄漏
+- **安全改进**：
+  - 使用Object.prototype.hasOwnProperty.call()替代直接调用
+  - 正则表达式使用模板字符串动态构建，避免硬编码
+  - 保留水印文本安全验证，防止ReDoS攻击
+- **配置优化**：
+  - 新增API_URL、DEFAULT_TIMEZONE等配置项
+  - 新增BASE64_MATCH_MIN_LENGTH、PAGE_LOAD_RETRIES等配置项
+  - 新增MAX_REPEATED_CHARS、MAX_REPEATED_SUBSTRINGS、MAX_NESTED_BRACKETS安全配置
+  - 移除不再使用的配置项（MAX_DEPTH、MAX_NODES、OBSERVER_DEBOUNCE等）
+- **文档更新**：
+  - 更新功能特性，反映Canvas专用设计
+  - 更新配置选项，移除废弃配置项
+  - 更新工作原理，专注Canvas拦截和清理
+  - 更新技术实现，反映新的代码架构
+  - 更新版本历史，添加v1.3.9说明
 
 ### v1.3.8 (2026-01-07)
 - **安全修复**：
@@ -485,7 +520,7 @@ console.log('水印候选列表:', WATERMARK_TEXT_CANDIDATES);
 ```
 MIT License
 
-Copyright (c) 2025 AlanWang
+Copyright (c) 2026 AlanWang
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

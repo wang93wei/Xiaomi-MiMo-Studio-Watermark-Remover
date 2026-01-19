@@ -1,48 +1,19 @@
 # Xiaomi MiMo Studio 去水印脚本 - 时序图文档
 
-**版本**: v1.3.8 | **更新日期**: 2026-01-07
+**版本**: v1.4.0 | **更新日期**: 2026-01-20
 
 本文档包含项目的时序图，展示脚本各组件之间的时间交互关系。
 
 ## 文档更新说明
 
-### v1.3.8 更新内容
-- 更新清理机制时序图，添加globalObserver的清理逻辑
-- 更新配置验证时序图，添加HIGH_ZINDEX_THRESHOLD和LOW_OPACITY_THRESHOLD配置项验证
-- 更新轮询时序图，体现智能轮询机制（前3次总是执行，之后只在有变化时执行）
-- 更新整体架构时序图，添加mutationCount全局变量
-- 添加日志配置时序图，展示localStorage和URL参数支持
-
-### v1.3.7 更新内容
-- 添加配置验证时序图，展示启动时的配置验证流程
-- 更新水印检测时序图，展示函数拆分后的子函数调用流程
-- 更新 DOM 监听时序图，展示精细的缓存清理策略（attribute、childList、default）
-- 更新性能优化时序图，添加正则表达式缓存和 TreeWalker 选项
-- 更新错误处理时序图，展示增强的错误日志格式化
-- 更新完整交互时序图，包含配置验证和配置开关控制
-- 更新水印移除时序图，展示正则表达式缓存的使用
-- 添加配置验证时序图，展示所有配置项的验证流程
-
-### v1.3.6 更新内容
-- 重构覆盖层检测时序图，展示函数拆分后的辅助函数调用流程
-- 更新 DOM 监听时序图，包含 Shadow Root 样式缓存清理逻辑
-- 更新水印获取时序图，简化 API 请求 headers
-- 更新完整交互时序图，添加配置开关控制流程
-- 更新性能优化时序图，展示预过滤优化
-- 更新水印移除时序图，改进超时检查逻辑
-- 添加配置开关时序图，展示原型链拦截的启用/禁用控制
-
-### v1.3.5 更新内容
-- 添加配置系统 (CONFIG) 相关时序图
-- 添加样式缓存 (WeakMap) 相关时序图
-- 添加清理机制 (cleanup) 时序图
-- 添加安全验证时序图
-- 更新水印检测时序图，展示迭代遍历
-- 更新性能优化时序图，展示缓存机制
-- 更新完整交互时序图，包含所有新组件
-- 修正清理机制时序图，反映实际实现（仅清除定时器和事件监听器）
-- 修正覆盖层检测时序图，包含MAIN和ASIDE标签类型
-- 移除整体架构和完整交互时序图中的页面卸载cleanup调用说明
+### v1.4.0 更新内容
+- 完全重写时序图，专注于Canvas水印拦截和清理
+- 移除所有DOM遍历、CSS拦截、MutationObserver等已废弃功能的时序图
+- 新增Canvas拦截时序图，展示fillText、strokeText、drawImage的拦截流程
+- 新增Canvas清理时序图，展示可疑Canvas的检测和清理流程
+- 新增水印获取时序图，展示API请求和页面检测备选方案
+- 新增动态监听时序图，展示轮询和resize监听机制
+- 新增完整交互时序图，展示从脚本启动到水印移除的完整流程
 
 ## 1. 整体架构时序图
 
@@ -51,52 +22,34 @@ sequenceDiagram
     participant User as 用户浏览器
     participant Script as Tampermonkey 脚本
     participant Config as 配置系统
-    participant Cache as 样式缓存
+    participant State as 状态管理
     participant API as MiMo API
-    participant DOM as DOM 树
-    participant Observer as MutationObserver
     participant Canvas as Canvas API
+    participant DOM as DOM 树
 
     User->>Script: 加载页面
-    Script->>Config: 初始化配置 (CONFIG, ENABLE_LOG, 拦截开关)
+    Script->>Config: 初始化配置 (CONFIG)
     Config-->>Script: 配置参数
-    Script->>Cache: 初始化样式缓存 (WeakMap)
+    Script->>State: 初始化状态 (watermarkText, processedElements, etc.)
+    State-->>Script: 状态对象
     Script->>API: 获取用户水印内容
     API-->>Script: 返回水印文本
-    Script->>Script: 验证水印文本安全性
-    Script->>Script: 预过滤候选列表（仅包含有效字符串）
-    Script->>candidateCache: 缓存预过滤后的候选列表
-
-    alt DOM 已加载
-        Script->>DOM: 首次全量扫描
-        DOM-->>Script: 返回扫描结果
-    else DOM 未加载
-        Script->>DOM: 等待 DOMContentLoaded
-        DOM-->>Script: DOM 就绪
-        Script->>DOM: 首次全量扫描
-        DOM-->>Script: 返回扫描结果
-    end
-
-    Script->>Observer: 设置 MutationObserver
+    Script->>State: 更新水印文本
+    Script->>State: 重建水印候选列表
 
     alt ENABLE_CANVAS_INTERCEPT 为 true
         Script->>Canvas: 拦截 Canvas API
+        Canvas-->>Script: 拦截成功
     end
 
     Script->>Script: 进入监控状态
+    Script->>DOM: 初始 Canvas 清理
+    DOM-->>Script: 清理结果
 
     loop 持续监控
-        DOM->>Observer: DOM 变化事件
-        Observer->>Cache: 清除相关元素样式缓存（含 Shadow Root）
-        Observer->>Script: 通知变化
-        Script->>Cache: 获取缓存的样式
-        Cache-->>Script: 样式数据
-        Script->>candidateCache: 使用预过滤的候选列表检查水印
-        candidateCache-->>Script: 匹配结果
-        Script->>DOM: 局部扫描
-        DOM-->>Script: 扫描结果
-        Script->>DOM: 检测并移除水印
-        DOM-->>Script: 移除完成
+        Script->>Script: 轮询检测 Canvas
+        Script->>DOM: 检测并清理可疑 Canvas
+        DOM-->>Script: 清理结果
     end
 ```
 
@@ -109,9 +62,10 @@ sequenceDiagram
     participant API as MiMo User API
     participant Validator as 验证器
     participant Utils as 解码工具
+    participant State as 状态管理
 
     Script->>Config: 获取配置参数
-    Config-->>Script: MAX_RETRIES, RETRY_DELAY, FETCH_TIMEOUT
+    Config-->>Script: API_URL, FETCH_TIMEOUT, MAX_RETRIES, etc.
 
     loop 重试机制
         Script->>API: GET /open-apis/user/mi/get
@@ -129,6 +83,7 @@ sequenceDiagram
 
             Script->>Utils: 解析 JSON
             Utils-->>Script: 水印文本
+
             Script->>Utils: Base64 解码
             Utils-->>Script: 解码结果
 
@@ -137,19 +92,18 @@ sequenceDiagram
                 Utils-->>Script: UTF-8 解码结果
 
                 alt UTF-8 解码成功
-                    Script->>Script: 添加所有候选
+                    Script->>State: 添加所有候选
                 else UTF-8 解码失败
-                    Script->>Script: 使用 Base64 结果
+                    Script->>State: 使用 Base64 结果
                 end
             else Base64 解码失败
-                Script->>Script: 使用原始文本
+                Script->>State: 使用原始文本
             end
 
             Script->>Validator: 验证水印文本安全性
             Validator-->>Script: 安全检查通过
 
-            Script->>Script: 预过滤候选列表
-            Script->>Script: 构建水印候选列表（仅包含有效字符串）
+            Script->>State: 重建水印候选列表
             Script-->>Script: 获取成功
         else 请求失败
             Script->>Script: 记录错误
@@ -163,244 +117,7 @@ sequenceDiagram
     end
 ```
 
-## 3. 水印检测时序图
-
-```mermaid
-sequenceDiagram
-    participant DOM as DOM 树
-    participant Scanner as 检测器
-    participant Config as 配置系统
-    participant ProcessedCache as 已处理缓存
-    participant StyleCache as 样式缓存
-    participant Validator as 输入验证器
-    participant Remover as 移除器
-
-    Scanner->>Config: 获取遍历配置
-    Config-->>Scanner: MAX_DEPTH, MAX_NODES
-
-    Scanner->>DOM: 初始化遍历
-    Scanner->>Scanner: 创建处理栈
-    Scanner->>DOM: 将根节点压入栈
-
-    loop 迭代遍历
-        alt 栈不为空 & 未达节点限制
-            Scanner->>Scanner: 从栈中弹出节点
-
-            alt 节点有效 & 深度 <= MAX_DEPTH
-                alt 元素节点
-                    Scanner->>ProcessedCache: 检查是否已处理
-                    ProcessedCache-->>Scanner: 处理状态
-
-                    alt 已处理
-                        Scanner->>DOM: 跳过此节点
-                    else 未处理
-                        Scanner->>StyleCache: 获取缓存的样式
-                        StyleCache-->>Scanner: 样式数据
-
-                        Scanner->>Validator: 验证节点输入
-                        Validator-->>Scanner: 验证通过
-
-                        Scanner->>Scanner: 检查覆盖层特征
-
-                        alt 是覆盖层
-                            Scanner->>Remover: 隐藏覆盖层
-                            Remover->>ProcessedCache: 标记为已处理
-                        else 非覆盖层
-                            Scanner->>Scanner: 检查文本内容
-
-                            alt 包含水印文本
-                                Scanner->>Remover: 移除水印元素
-                                Remover->>ProcessedCache: 标记为已处理
-                            else 不包含水印
-                                Scanner->>Scanner: 检查图片
-
-                                alt 包含水印图片
-                                    Scanner->>Remover: 处理图片水印
-                                    Remover->>ProcessedCache: 标记为已处理
-                                else 不包含图片
-                                    Scanner->>DOM: 将子节点压入栈
-                                    DOM-->>Scanner: 子节点列表
-                                end
-                            end
-                        end
-                    end
-                else 文本节点
-                    Scanner->>Validator: 验证文本输入
-                    Validator-->>Scanner: 验证通过
-
-                    Scanner->>Scanner: 检查文本内容
-
-                    alt 包含水印
-                        Scanner->>Remover: 移除文本节点
-                    else 不包含水印
-                        Scanner->>DOM: 继续下一个节点
-                    end
-                else 其他节点
-                    Scanner->>DOM: 跳过
-                end
-
-                alt 存在 Shadow Root
-                    Scanner->>DOM: 检查 Shadow DOM
-                    DOM-->>Scanner: Shadow Root
-                    Scanner->>DOM: 将 Shadow Root 压入栈
-                end
-            else 节点无效或超深
-                Scanner->>DOM: 跳过此节点
-            end
-        else 达到节点限制
-            Scanner->>Scanner: 停止遍历
-            Scanner->>Scanner: 记录警告
-        end
-    end
-```
-
-## 4. 水印移除时序图
-
-```mermaid
-sequenceDiagram
-    participant Detector as 检测器
-    participant Config as 配置系统
-    participant Validator as 验证器
-    participant Remover as 移除器
-    participant Element as DOM 元素
-    participant ProcessedCache as 已处理缓存
-
-    Detector->>Remover: 调用移除函数
-    Remover->>Validator: 验证元素输入
-    Validator-->>Remover: 验证通过
-    Remover->>ProcessedCache: 标记元素为已处理
-    ProcessedCache-->>Remover: 标记完成
-
-    alt 图片水印
-        Remover->>Element: 清除背景图片
-        Remover->>Element: 清除内联样式
-
-        alt 是 img 标签
-            Element->>Element: 设置 display: none
-            Element->>Element: 移除元素
-        else 其他元素
-            Remover->>Element: 设置样式隐藏
-        end
-
-    else 文本水印
-        Remover->>Remover: 检查元素内容
-
-        alt 只包含水印文本
-            Element->>Element: 移除整个元素
-        else 包含其他内容
-            Remover->>Validator: 验证水印文本安全性
-            Validator-->>Remover: 安全检查通过
-
-            Remover->>Config: 获取正则超时配置
-            Config-->>Remover: REGEX_TIMEOUT
-
-            Remover->>Remover: 记录开始时间
-
-            alt 使用正则替换
-                Remover->>Remover: 检查初始超时
-
-                alt 初始超时
-                    Remover->>Remover: 记录警告，跳过
-                else 未超时
-                    Remover->>Element: 替换 textContent
-                    Remover->>Element: 替换 innerText
-                    Remover->>Element: 替换 innerHTML
-
-                    Remover->>Remover: 检查最终超时
-
-                    alt 最终超时
-                        Remover->>Remover: 记录警告，部分替换可能未完成
-                    else 未超时
-                        Remover->>Remover: 替换完成
-                    end
-                end
-            end
-
-            alt 元素变为空
-                Element->>Element: 移除元素
-            else 元素仍有内容
-                Remover->>Element: 保留元素
-            end
-        end
-
-    else 覆盖层
-        Element->>Element: backgroundImage = none
-        Element->>Element: background = none
-        Element->>Element: opacity = 0
-        Element->>Element: visibility = hidden
-        Element->>Element: display = none
-    end
-
-    Remover-->>Detector: 移除完成
-```
-
-## 5. DOM 监听时序图
-
-```mermaid
-sequenceDiagram
-    participant DOM as DOM 树
-    participant Config as 配置系统
-    participant Observer as MutationObserver
-    participant StyleCache as 样式缓存
-    participant Debounce as 防抖函数
-    participant Scanner as 检测器
-
-    DOM->>Observer: 注册监听
-    Observer->>Config: 获取防抖配置
-    Config-->>Observer: OBSERVER_DEBOUNCE
-    Observer->>DOM: 配置观察选项
-    Observer->>DOM: 观察属性变化 (style, src, class)
-    Observer->>DOM: 观察子节点变化
-    Observer->>DOM: 观察后代节点
-
-    loop 持续监听
-        DOM->>Observer: 触发 MutationEvent
-
-        alt 有新节点添加
-            Observer->>Observer: 收集新增节点
-        else 属性变化
-            Observer->>Observer: 收集变化目标
-        end
-
-        Observer->>Debounce: 触发防抖
-
-        alt 防抖超时
-            par 清除相关样式缓存
-                Debounce->>StyleCache: 清除元素样式缓存
-                StyleCache-->>Debounce: 缓存已清除
-            and
-                Debounce->>DOM: 查找所有子元素
-                DOM-->>Debounce: 子元素列表
-                Debounce->>StyleCache: 清除子元素样式缓存
-                StyleCache-->>Debounce: 缓存已清除
-            end
-
-            alt 节点有 Shadow Root
-                Debounce->>DOM: 检查 Shadow Root
-                DOM-->>Debounce: Shadow Root 存在
-
-                par 清除 Shadow Root 缓存
-                    Debounce->>DOM: 查询 Shadow Root 中所有元素
-                    DOM-->>Debounce: Shadow 元素列表
-                    Debounce->>StyleCache: 清除 Shadow 元素样式缓存
-                    StyleCache-->>Debounce: 缓存已清除
-                end
-            end
-
-            Debounce->>Scanner: 执行扫描
-            Scanner->>StyleCache: 获取缓存的样式
-            StyleCache-->>Scanner: 样式数据
-            Scanner->>DOM: 检测覆盖层
-            DOM-->>Scanner: 检测结果
-            Scanner->>DOM: 移除水印
-            DOM-->>Scanner: 移除完成
-        else 新变化到来
-            Debounce->>Debounce: 重置计时器
-        end
-    end
-```
-
-## 6. Canvas 拦截时序图
+## 3. Canvas 拦截时序图
 
 ```mermaid
 sequenceDiagram
@@ -408,22 +125,24 @@ sequenceDiagram
     participant CanvasCtx as CanvasContext
     participant Interceptor as 拦截器
     participant Watermark as 水印检测
+    participant State as 状态管理
 
     Page->>CanvasCtx: 获取 2D 上下文
     CanvasCtx-->>Page: CanvasRenderingContext2D
-    
+
     Interceptor->>CanvasCtx: 保存原始方法
     CanvasCtx-->>Interceptor: 原始 fillText
     CanvasCtx-->>Interceptor: 原始 strokeText
     CanvasCtx-->>Interceptor: 原始 drawImage
-    
+
     Interceptor->>CanvasCtx: 重写方法
-    
+
     loop 应用调用 Canvas
         Page->>CanvasCtx: 调用 fillText(text, x, y)
         CanvasCtx->>Interceptor: 检查文本内容
         Interceptor->>Watermark: 匹配水印
-        
+        Watermark->>State: 使用水印候选列表
+
         alt 包含水印
             Interceptor->>CanvasCtx: 直接返回 (阻止绘制)
             CanvasCtx-->>Page: 无绘制
@@ -431,22 +150,24 @@ sequenceDiagram
             CanvasCtx->>CanvasCtx: 调用原始 fillText
             CanvasCtx-->>Page: 绘制文本
         end
-        
+
         Page->>CanvasCtx: 调用 strokeText(text, x, y)
         CanvasCtx->>Interceptor: 检查文本内容
         Interceptor->>Watermark: 匹配水印
-        
+        Watermark->>State: 使用水印候选列表
+
         alt 包含水印
             Interceptor->>CanvasCtx: 直接返回 (阻止绘制)
         else 不包含水印
             CanvasCtx->>CanvasCtx: 调用原始 strokeText
             CanvasCtx-->>Page: 绘制描边文本
         end
-        
+
         Page->>CanvasCtx: 调用 drawImage(image, ...)
         CanvasCtx->>Interceptor: 检查图片源
         Interceptor->>Watermark: 匹配水印
-        
+        Watermark->>State: 使用水印候选列表
+
         alt 包含水印
             Interceptor->>CanvasCtx: 直接返回 (阻止绘制)
         else 不包含水印
@@ -454,711 +175,209 @@ sequenceDiagram
             CanvasCtx-->>Page: 绘制图片
         end
     end
-    
+
     alt 支持 OffscreenCanvas
         Interceptor->>OffscreenCanvas: 同样拦截
     end
 ```
 
-## 7. 覆盖层检测时序图
+## 4. Canvas 清理时序图
 
 ```mermaid
 sequenceDiagram
-    participant Element as DOM 元素
-    participant MainChecker as 主检测器
-    participant Validator as 元素验证器
-    participant PointerChecker as pointer-events 检查器
-    participant ZIndexChecker as z-index 检查器
-    participant OpacityChecker as opacity 检查器
-    participant PositionChecker as position 检查器
-    participant BgImageChecker as 背景图片检查器
-    participant ViewportChecker as 视口覆盖检查器
-    participant StyleCache as 样式缓存
+    participant Script as 脚本
+    participant DOM as DOM 树
+    participant Canvas as Canvas 元素
+    participant Config as 配置系统
+    participant State as 状态管理
 
-    MainChecker->>Element: 检查元素
+    Script->>DOM: querySelectorAll('canvas')
+    DOM-->>Script: Canvas 元素列表
 
-    MainChecker->>Validator: 检查元素有效性
-    Validator-->>MainChecker: 检查结果
+    loop 遍历 Canvas 元素
+        Script->>State: 检查是否已处理
+        State-->>Script: 处理状态
 
-    alt 元素无效
-        MainChecker-->>Detector: 返回 false
-    else 元素有效
-        MainChecker->>PointerChecker: 检查 pointer-events
-        PointerChecker->>Element: 检查内联样式
-        Element-->>PointerChecker: pointerEvents 值
+        alt 已处理
+            Script->>Script: 跳过此 Canvas
+        else 未处理
+            Script->>Canvas: getComputedStyle()
+            Canvas-->>Script: 样式对象
 
-        alt 内联样式为 auto
-            PointerChecker-->>MainChecker: 返回 false
-        else 需要检查计算样式
-            PointerChecker->>StyleCache: 获取缓存的样式
-            StyleCache-->>PointerChecker: 样式数据
-            PointerChecker-->>MainChecker: pointer-events: none?
-        end
+            Script->>Config: 获取检测配置
+            Config-->>Script: VIEWPORT_COVERAGE_THRESHOLD
 
-        alt 不是 none
-            MainChecker-->>Detector: 返回 false
-        else 是 none
-            MainChecker->>BgImageChecker: 检查背景图片
-            BgImageChecker->>StyleCache: 获取缓存的样式
-            StyleCache-->>BgImageChecker: 样式数据
-            BgImageChecker-->>MainChecker: 有背景图片?
+            alt 检测条件满足
+                Note over Script: 覆盖大部分视口 + (fixed/absolute 或 pointer-events: none)
 
-            alt 无背景图片且非 Canvas
-                MainChecker-->>Detector: 返回 false
-            else 有背景图片或 Canvas
-                MainChecker->>ViewportChecker: 检查视口覆盖
-                ViewportChecker->>Element: 获取元素尺寸
-                Element-->>ViewportChecker: width, height
-                ViewportChecker->>ViewportChecker: 获取视口尺寸
-                ViewportChecker->>ViewportChecker: 计算覆盖率
-                ViewportChecker-->>MainChecker: 覆盖 >= 90%?
+                Script->>Canvas: getContext('2d')
+                Canvas-->>Script: 2D 上下文
 
-                alt 覆盖率不足
-                    MainChecker-->>Detector: 返回 false
-                else 覆盖率足够
-                    par 并行检查样式特征
-                        MainChecker->>ZIndexChecker: 检查 z-index
-                        ZIndexChecker->>StyleCache: 获取缓存的样式
-                        StyleCache-->>ZIndexChecker: 样式数据
-                        ZIndexChecker-->>MainChecker: z-index >= 100?
-                    and
-                        MainChecker->>OpacityChecker: 检查 opacity
-                        OpacityChecker->>StyleCache: 获取缓存的样式
-                        StyleCache-->>OpacityChecker: 样式数据
-                        OpacityChecker-->>MainChecker: opacity < 1?
-                    and
-                        MainChecker->>PositionChecker: 检查 position
-                        PositionChecker->>StyleCache: 获取缓存的样式
-                        StyleCache-->>PositionChecker: 样式数据
-                        PositionChecker-->>MainChecker: fixed/absolute?
-                    end
+                Script->>Canvas: clearRect(0, 0, width, height)
+                Script->>Canvas: 设置样式隐藏
+                Canvas-->>Script: display: none, etc.
 
-                    alt 至少满足一个样式特征
-                        MainChecker-->>Detector: 返回 true (是覆盖层)
-                    else 所有样式特征都不满足
-                        MainChecker-->>Detector: 返回 false (非覆盖层)
-                    end
-                end
+                Script->>State: 标记为已处理
+                State-->>Script: 标记完成
+            else 检测条件不满足
+                Script->>Script: 保留 Canvas
             end
         end
     end
 ```
 
-## 8. 性能优化时序图
+## 5. 动态监听时序图
 
 ```mermaid
 sequenceDiagram
-    participant Trigger as 触发源
-    participant Config as 配置系统
-    participant Debounce as 防抖器
-    participant ProcessedCache as WeakSet 缓存
-    participant StyleCache as 样式缓存
-    participant Scanner as 扫描器
+    participant Script as 脚本
+    participant Timer as 轮询定时器
     participant DOM as DOM 树
+    participant Window as 浏览器窗口
+    participant State as 状态管理
 
-    Note over Trigger,candidateCache: 候选列表已在获取水印时预过滤
+    Script->>Script: 启动水印移除功能
+    Script->>State: 检查水印文本
 
-    loop 频繁触发事件
-        Trigger->>Config: 获取防抖配置
-        Config-->>Trigger: OBSERVER_DEBOUNCE
+    alt 水印文本存在
+        Script->>Canvas: 拦截 Canvas API
+        Canvas-->>Script: 拦截成功
 
-        Trigger->>Debounce: 触发操作
+        Script->>DOM: 初始 Canvas 清理
+        DOM-->>Script: 清理结果
 
-        alt 首次触发
-            Debounce->>Debounce: 设置定时器
-            Debounce-->>Trigger: 等待中
-        else 再次触发
-            Debounce->>Debounce: 重置计时器
-            Debounce-->>Trigger: 等待中
+        par 创建资源
+            Script->>Timer: 创建轮询定时器
+            Timer-->>Script: pollTimer 引用
+
+            Script->>Window: 添加 resize 监听器
+            Window-->>Script: resizeHandler 引用
         end
+
+        Note over Script,Timer: 脚本运行中...
+
+        loop 轮询检测
+            Timer->>Script: 触发轮询 (每500ms)
+            Script->>State: pollCount++
+
+            alt pollCount <= MAX_POLL_COUNT (20次)
+                Script->>DOM: 检测并清理 Canvas
+                DOM-->>Script: 清理结果
+            else 达到最大轮询次数
+                Script->>Timer: 清除定时器
+                Timer-->>Script: pollTimer = null
+                Note over Script: 轮询检测完成
+            end
+        end
+
+        loop resize 监听
+            Window->>Script: 触发 resize 事件
+            Script->>DOM: 检测并清理 Canvas
+            DOM-->>Script: 清理结果
+        end
+    else 水印文本为空
+        Script->>Script: 记录警告
+        Script->>Script: 无法启动移除功能
     end
 
-    Debounce->>Scanner: 执行扫描
-    Scanner->>Config: 获取遍历配置
-    Config-->>Scanner: MAX_DEPTH, MAX_NODES
-
-    Scanner->>ProcessedCache: 检查元素是否已处理
-    ProcessedCache-->>Scanner: 处理状态
-
-    alt 已处理
-        Scanner->>Scanner: 跳过此元素
-        Scanner-->>Trigger: 扫描完成 (快速)
-    else 未处理
-        Scanner->>StyleCache: 获取缓存的样式
-        StyleCache-->>Scanner: 样式数据
-
-        Scanner->>DOM: 迭代遍历 DOM
-
-        Note over Scanner,DOM: 最大深度限制 12 层
-        Note over Scanner,DOM: 最大节点数限制 10000
-
-        Scanner->>DOM: 检查子节点
-        DOM-->>Scanner: 子节点列表
-
-        Scanner->>candidateCache: 检查水印（使用预过滤的候选列表）
-        candidateCache-->>Scanner: 匹配结果（无需重复过滤）
-
-        Scanner->>ProcessedCache: 标记为已处理
-        Scanner-->>Trigger: 扫描完成
-    end
-
-    loop 后续触发
-        Trigger->>ProcessedCache: 检查元素
-        ProcessedCache-->>Trigger: 已处理
-        Trigger->>Scanner: 快速跳过
-    end
+    Note over Script: 轮询和resize监听确保动态生成的Canvas水印也能被移除
 ```
 
-## 9. 完整交互时序图
+## 6. 完整交互时序图
 
 ```mermaid
 sequenceDiagram
     participant Browser as 浏览器
     participant Script as 脚本
     participant Config as 配置系统
-    participant StyleCache as 样式缓存
+    participant State as 状态管理
     participant API as MiMo API
-    participant Validator as 验证器
+    participant Canvas as Canvas API
     participant DOM as DOM 树
-    participant Observer as MutationObserver
-    participant Canvas as Canvas
 
     Browser->>Script: 加载脚本
 
     par 初始化并行操作
         Script->>Config: 初始化配置 (CONFIG)
         Config-->>Script: 配置参数（含拦截开关）
-        Script->>StyleCache: 初始化样式缓存
-        StyleCache-->>Script: WeakMap 已创建
+        Script->>State: 初始化状态
+        State-->>Script: 状态对象已创建
         Script->>API: 获取水印内容
-        API-->>Script: 水印文本
-        Script->>Validator: 验证水印文本
-        Validator-->>Script: 验证通过
-        Script->>Script: 预过滤候选列表
-        Script->>Script: 构建候选列表
     and 等待 DOM
         alt DOM 已就绪
-            Script->>DOM: 初始扫描
-        else 等待中
             Browser->>Script: DOMContentLoaded
-            Script->>DOM: 初始扫描
+        else 等待中
+            Browser->>Script: 页面加载完成
         end
     end
 
-    DOM-->>Script: 扫描结果
-    Script->>Script: 记录检测到的水印
+    API-->>Script: 水印文本
+    Script->>State: 更新水印文本
+    Script->>State: 重建水印候选列表
 
-    par 启动监控
-        Script->>Observer: 创建 MutationObserver
-        Observer->>DOM: 监听变化
-        Script->>Script: 启动轮询检测
-    end
+    alt 水印获取成功
+        Script->>Script: 启动水印移除功能
 
-    par Canvas 拦截（受配置控制）
-        Script->>Config: 检查 ENABLE_CANVAS_INTERCEPT
-        Config-->>Script: 配置状态
+        par 启动监控
+            Script->>Canvas: 拦截 Canvas API
+            Canvas-->>Script: 拦截成功
 
-        alt 启用 Canvas 拦截
-            Script->>Canvas: 拦截 API
-        else 禁用 Canvas 拦截
-            Script->>Script: 跳过 Canvas 拦截
+            Script->>DOM: 初始 Canvas 清理
+            DOM-->>Script: 清理结果
+
+            Script->>Timer: 创建轮询定时器
+            Timer-->>Script: pollTimer 引用
+
+            Script->>Window: 添加 resize 监听器
+            Window-->>Script: resizeHandler 引用
         end
-    end
 
-    par CSS 拦截（受配置控制）
-        Script->>Config: 检查 ENABLE_CSS_INTERCEPT
-        Config-->>Script: 配置状态
+        loop 运行时监控
+            par 轮询检测
+                Timer->>Script: 触发轮询
+                Script->>DOM: 检测并清理 Canvas
+                DOM-->>Script: 清理结果
+            end
 
-        alt 启用 CSS 拦截
-            Script->>Script: 拦截 CSSStyleSheet.insertRule
-        else 禁用 CSS 拦截
-            Script->>Script: 跳过 CSS 拦截
-        end
-    end
+            par resize 监听
+                Window->>Script: 触发 resize 事件
+                Script->>DOM: 检测并清理 Canvas
+                DOM-->>Script: 清理结果
+            end
 
-    par appendChild 拦截（受配置控制）
-        Script->>Config: 检查 ENABLE_APPEND_CHILD_INTERCEPT
-        Config-->>Script: 配置状态
+            par Canvas 拦截
+                Browser->>Canvas: 调用 Canvas 方法
+                Canvas->>Script: 检查水印
+                Script->>State: 使用水印候选列表
 
-        alt 启用 appendChild 拦截
-            Script->>Script: 拦截 Node.appendChild
-        else 禁用 appendChild 拦截
-            Script->>Script: 跳过 appendChild 拦截
-        end
-    end
-
-    loop 运行时监控
-        DOM->>Observer: DOM 变化
-        Observer->>StyleCache: 清除相关元素缓存（含 Shadow Root）
-        StyleCache-->>Observer: 缓存已清除
-        Observer->>Script: 通知变化
-        Script->>StyleCache: 获取缓存的样式
-        StyleCache-->>Script: 样式数据
-        Script->>DOM: 局部扫描
-
-        alt 发现新水印
-            DOM-->>Script: 返回新元素
-            Script->>Validator: 验证输入
-            Validator-->>Script: 验证通过
-            Script->>DOM: 移除水印
-            DOM-->>Script: 移除完成
-        else 无新水印
-            DOM-->>Script: 无变化
-        end
-    end
-
-    alt Canvas 拦截已启用
-        Canvas->>Script: fillText 调用
-        Script->>Validator: 验证文本输入
-        Validator-->>Script: 验证通过
-        Script->>Script: 检查文本（使用预过滤的候选列表）
-
-        alt 包含水印
-            Script->>Canvas: 阻止绘制
-        else 不包含水印
-            Canvas->>Canvas: 正常绘制
-        end
-    end
-```
-
-## 10. 清理机制时序图
-
-```mermaid
-sequenceDiagram
-    participant Script as 脚本
-    participant Timer as 定时器
-    participant EventListener as 事件监听器
-    participant Observer as MutationObserver
-    participant StyleCache as 样式缓存
-    participant ProcessedCache as 已处理缓存
-
-    Script->>Script: 启动水印移除功能
-
-    par 创建资源
-        Script->>Timer: 创建轮询定时器
-        Timer-->>Script: pollTimer 引用
-        Script->>EventListener: 添加 resize 监听器
-        EventListener-->>Script: resizeHandler 引用
-        Script->>Observer: 创建 MutationObserver
-        Observer-->>Script: observer 引用
-    end
-
-    Note over Script,Timer: 脚本运行中...
-
-    alt 重新启动水印移除
-        Script->>Script: 调用 cleanup()
-
-        Script->>Timer: 清除轮询定时器
-        Timer-->>Script: pollTimer = null
-
-        Script->>EventListener: 移除 resize 监听器
-        EventListener-->>Script: resizeHandler = null
-
-        Script->>Script: 清理完成
-    end
-
-    Script->>Script: 重新创建资源
-
-    par 创建新资源
-        Script->>Timer: 创建新的轮询定时器
-        Timer-->>Script: 新 pollTimer 引用
-        Script->>EventListener: 添加新的 resize 监听器
-        EventListener-->>Script: 新 resizeHandler 引用
-
-        Script->>Observer: 创建新的 MutationObserver
-        Observer-->>Script: 新 observer 引用
-    end
-
-    Note over Script,Timer: 脚本继续运行...
-
-    Note over Script,Timer: 注意：cleanup() 函数清除定时器、事件监听器和 MutationObserver
-```
-
-## 11. 安全验证时序图
-
-```mermaid
-sequenceDiagram
-    participant Input as 输入数据
-    participant Validator as 验证器
-    participant Config as 配置系统
-    participant Security as 安全检查
-    participant Output as 输出结果
-
-    Input->>Validator: 接收输入数据
-    Validator->>Config: 获取验证配置
-    Config-->>Validator: 验证规则
-
-    Validator->>Validator: 类型检查
-
-    alt 类型无效
-        Validator-->>Output: 返回 false
-    else 类型有效
-        Validator->>Validator: 空值检查
-
-        alt 空值
-            Validator-->>Output: 返回 false
-        else 非空
-            Validator->>Validator: 长度检查
-
-            alt 长度超限
-                Validator-->>Output: 返回 false
-            else 长度合法
-                Validator->>Security: 安全模式检查
-
-                alt 检测到危险模式
-                    Security-->>Validator: 发现危险
-                    Validator-->>Output: 返回 false
-                else 安全检查通过
-                    Validator->>Validator: 格式验证
-
-                    alt 格式无效
-                        Validator-->>Output: 返回 false
-                    else 格式有效
-                        Validator-->>Output: 返回 true
-                    end
+                alt 包含水印
+                    Script->>Canvas: 阻止绘制
+                else 不包含水印
+                    Canvas->>Canvas: 正常绘制
                 end
             end
         end
-    end
+    else 水印获取失败
+        Script->>Script: 等待页面加载
+        Browser->>Script: load 事件
 
-    Note over Input,Output: 所有验证失败都会记录错误日志
-```
+        Script->>Script: 等待一段时间
+        Script->>API: 重试获取水印
+        API-->>Script: 水印文本
 
-## 12. 配置开关时序图
+        alt 重试成功
+            Script->>Script: 启动水印移除功能
+        else 仍然失败
+            Script->>DOM: 尝试从页面检测水印
+            DOM-->>Script: 检测结果
 
-```mermaid
-sequenceDiagram
-    participant Script as 脚本
-    participant Config as 配置系统
-    participant CanvasInterceptor as Canvas 拦截器
-    participant CSSInterceptor as CSS 拦截器
-    participant AppendChildInterceptor as appendChild 拦截器
-    participant Logger as 日志系统
-
-    Script->>Config: 初始化配置
-    Config-->>Script: 配置参数（含拦截开关）
-
-    Script->>Script: 启动水印移除功能
-    Script->>CanvasInterceptor: 调用 interceptCanvas()
-
-    CanvasInterceptor->>Config: 检查 ENABLE_CANVAS_INTERCEPT
-    Config-->>CanvasInterceptor: 配置值
-
-    alt Canvas 拦截已启用
-        CanvasInterceptor->>CanvasInterceptor: 检查是否已拦截
-
-        alt 未拦截
-            CanvasInterceptor->>CanvasInterceptor: 保存原始方法
-            CanvasInterceptor->>CanvasInterceptor: 重写 Prototype 方法
-            CanvasInterceptor->>Logger: 记录拦截已安装
-            CanvasInterceptor-->>Script: Canvas 拦截成功
-        else 已拦截
-            CanvasInterceptor->>Logger: 记录跳过重复安装
-            CanvasInterceptor-->>Script: Canvas 拦截已存在
-        end
-    else Canvas 拦截已禁用
-        CanvasInterceptor->>Logger: 记录 Canvas 拦截已禁用
-        CanvasInterceptor-->>Script: 跳过 Canvas 拦截
-    end
-
-    Script->>CSSInterceptor: 调用 interceptStyles()
-
-    CSSInterceptor->>Config: 检查 ENABLE_CSS_INTERCEPT 和 ENABLE_APPEND_CHILD_INTERCEPT
-    Config-->>CSSInterceptor: 配置值
-
-    alt 至少启用一个拦截
-        CSSInterceptor->>CSSInterceptor: 检查是否已拦截
-
-        alt 未拦截
-            alt ENABLE_CSS_INTERCEPT 为 true
-                CSSInterceptor->>CSSInterceptor: 拦截 CSSStyleSheet.insertRule
-                CSSInterceptor->>Logger: 记录 CSS 拦截已安装
-            end
-
-            alt ENABLE_APPEND_CHILD_INTERCEPT 为 true
-                CSSInterceptor->>CSSInterceptor: 拦截 Node.appendChild
-                CSSInterceptor->>Logger: 记录 appendChild 拦截已安装
-            end
-
-            CSSInterceptor->>CSSInterceptor: 标记为已拦截
-            CSSInterceptor-->>Script: CSS 拦截成功
-        else 已拦截
-            CSSInterceptor->>Logger: 记录跳过重复安装
-            CSSInterceptor-->>Script: CSS 拦截已存在
-        end
-    else 所有拦截已禁用
-        CSSInterceptor->>Logger: 记录 CSS 拦截已禁用
-        CSSInterceptor-->>Script: 跳过 CSS 拦截
-    end
-
-    Note over Script,Logger: 配置开关允许用户控制激进的原型链修改，减少对页面功能的影响
-```
-
-## 13. 配置验证时序图
-
-```mermaid
-sequenceDiagram
-    participant Main as 主函数
-    participant Config as 配置系统
-    participant Validator as 验证器
-    participant Logger as 日志系统
-
-    Main->>Main: 脚本启动
-    Main->>Config: 传入 CONFIG 对象
-    Config-->>Validator: 验证配置
-
-    Validator->>Validator: 初始化错误列表
-
-    par 并行验证所有配置项
-        Validator->>Validator: 验证 MAX_DEPTH (1-20)
-        Validator->>Validator: 验证 MAX_NODES (100-100000)
-        Validator->>Validator: 验证 MAX_POLL_COUNT (1-100)
-        Validator->>Validator: 验证 POLL_INTERVAL (100-10000)
-        Validator->>Validator: 验证 MAX_RETRIES (0-10)
-        Validator->>Validator: 验证 RETRY_DELAY (100-60000)
-        Validator->>Validator: 验证 RETRY_BACKOFF (1-3)
-        Validator->>Validator: 验证 FETCH_TIMEOUT (1000-60000)
-        Validator->>Validator: 验证 REGEX_TIMEOUT (10-10000)
-        Validator->>Validator: 验证 MAX_WATERMARK_LENGTH (1-10000)
-        Validator->>Validator: 验证 MIN_WATERMARK_LENGTH (1-MAX)
-        Validator->>Validator: 验证 OBSERVER_DEBOUNCE (10-1000)
-        Validator->>Validator: 验证 RESIZE_DEBOUNCE (100-5000)
-        Validator->>Validator: 验证 VIEWPORT_COVERAGE_THRESHOLD (0.5-1)
-        Validator->>Validator: 验证 BASE64_MATCH_MAX_LENGTH (10-1000)
-        Validator->>Validator: 验证 PAGE_LOAD_WAIT_TIME (1000-10000)
-        Validator->>Validator: 验证 HIGH_ZINDEX_THRESHOLD (number)
-        Validator->>Validator: 验证 LOW_OPACITY_THRESHOLD (number)
-        Validator->>Validator: 验证 USE_TREE_WALKER (boolean)
-    end
-
-    alt 发现配置错误
-        Validator->>Logger: 记录所有错误
-        Logger-->>Validator: 错误列表
-        Validator-->>Main: 抛出异常
-        Main->>Logger: 记录配置验证失败
-        Main->>Main: 终止脚本启动
-    else 所有配置有效
-        Validator->>Logger: 记录验证通过
-        Validator-->>Main: 验证成功
-        Main->>Main: 继续执行初始化
-    end
-```
-
-## 14. 正则表达式缓存时序图
-
-```mermaid
-sequenceDiagram
-    participant Remover as 移除器
-    participant RegexCache as 正则缓存
-    participant WatermarkText as 水印文本
-    participant Validator as 验证器
-
-    Remover->>RegexCache: getWatermarkRegex(watermarkText)
-
-    alt 水印文本为空或无效
-        RegexCache->>Validator: 验证输入
-        Validator-->>RegexCache: 无效
-        RegexCache-->>Remover: 返回 null
-    else 水印文本有效
-        RegexCache->>RegexCache: 检查缓存
-
-        alt 缓存命中
-            RegexCache->>RegexCache: 获取缓存的正则表达式
-            RegexCache-->>Remover: 返回缓存的正则表达式
-        else 缓存未命中
-            RegexCache->>WatermarkText: 转义特殊字符
-            WatermarkText-->>RegexCache: 转义后的字符串
-
-            RegexCache->>RegexCache: 创建正则表达式 (全局标志)
-            RegexCache->>RegexCache: 存入缓存
-            RegexCache-->>Remover: 返回新创建的正则表达式
-        end
-    end
-
-    Remover->>Remover: 使用正则表达式替换水印文本
-
-    Note over Remover,RegexCache: 后续调用相同水印文本时直接从缓存获取，避免重复编译
-```
-
-## 15. 函数重构时序图
-
-```mermaid
-sequenceDiagram
-    participant Main as 主函数
-    participant Scanner as 检测器
-    participant StackInit as 栈初始化器
-    participant ElementProcessor as 元素处理器
-    participant ChildProcessor as 子节点处理器
-    participant ShadowProcessor as Shadow处理器
-    participant LimitChecker as 限制检查器
-
-    Main->>Scanner: detectAndRemoveWatermarks(root)
-
-    Scanner->>Scanner: 检查 root 是否有效
-
-    alt root 无效
-        Scanner-->>Main: 直接返回
-    else root 有效
-        Scanner->>StackInit: initializeTraversalStack(root)
-        StackInit-->>Scanner: 初始化的栈 [{node: root, depth: 0}]
-
-        Scanner->>Scanner: 设置遍历参数 (maxDepth, maxNodes)
-
-        loop 迭代遍历
-            alt 栈不为空 & 未达节点限制
-                Scanner->>Scanner: 从栈中弹出节点 {node, depth}
-
-                alt 节点有效 & 深度 <= maxDepth
-                    alt 元素节点
-                        Scanner->>ElementProcessor: processElementNode(node)
-
-                        ElementProcessor->>ElementProcessor: 检查是否已处理
-
-                        alt 已处理
-                            ElementProcessor-->>Scanner: 跳过
-                        else 未处理
-                            ElementProcessor->>ElementProcessor: 检查覆盖层特征
-
-                            alt 是覆盖层
-                                ElementProcessor->>ElementProcessor: 隐藏覆盖层
-                                ElementProcessor-->>Scanner: 已处理
-                            else 非覆盖层
-                                ElementProcessor->>ElementProcessor: 检查水印内容
-
-                                alt 包含水印
-                                    ElementProcessor->>ElementProcessor: 移除水印
-                                    ElementProcessor-->>Scanner: 已处理
-                                else 不包含水印
-                                    Scanner->>ChildProcessor: processChildNodes(node, stack, depth)
-                                    ChildProcessor-->>Scanner: 子节点已压入栈
-                                end
-                            end
-                        end
-
-                        Scanner->>ShadowProcessor: processShadowRoot(node, stack, depth)
-                        ShadowProcessor-->>Scanner: Shadow Root 已压入栈
-                    else 文本节点
-                        Scanner->>Scanner: 检查文本内容
-
-                        alt 包含水印
-                            Scanner->>Scanner: 移除文本节点
-                        end
-                    end
-                else 节点无效或超深
-                    Scanner->>Scanner: 跳过
-                end
-            else 达到节点限制
-                Scanner->>LimitChecker: checkProcessingLimit(processedNodes, maxNodes)
-                LimitChecker->>Logger: 记录警告
-                LimitChecker-->>Scanner: 停止遍历
+            alt 页面检测成功
+                Script->>Script: 启动水印移除功能
             end
         end
-
-        Scanner-->>Main: 遍历完成
     end
+
+    Note over Script: 脚本专注于Canvas水印的拦截和清理，使用现代JavaScript特性优化性能
 ```
 
-## 16. 精细缓存清理时序图
-
-```mermaid
-sequenceDiagram
-    participant Observer as MutationObserver
-    participant NodeCollector as 节点收集器
-    participant CacheCleaner as 缓存清理器
-    participant StyleCache as 样式缓存
-    participant Scanner as 扫描器
-
-    loop DOM 变化监听
-        DOM->>Observer: 触发 MutationEvent
-
-        Observer->>NodeCollector: 收集变更节点
-
-        alt childList 变化
-            NodeCollector->>NodeCollector: 收集新增节点
-            NodeCollector->>CacheCleaner: clearStyleCacheForNode(nodes, 'childList')
-        else attribute 变化
-            NodeCollector->>NodeCollector: 收集变化目标
-            NodeCollector->>CacheCleaner: clearStyleCacheForNode(targets, 'attribute')
-        end
-
-        CacheCleaner->>CacheCleaner: 判断 mutationType
-
-        alt mutationType = 'attribute'
-            CacheCleaner->>StyleCache: 只清除当前节点的缓存
-            StyleCache-->>CacheCleaner: 缓存已清除
-        else mutationType = 'childList'
-            CacheCleaner->>StyleCache: 清除当前节点和新子节点的缓存
-            StyleCache-->>CacheCleaner: 缓存已清除
-        else mutationType = 'default'
-            CacheCleaner->>StyleCache: 清除当前节点及其所有子节点的缓存
-            CacheCleaner->>StyleCache: 清除 Shadow Root 中的缓存
-            StyleCache-->>CacheCleaner: 缓存已清除
-        end
-
-        CacheCleaner->>Scanner: 执行局部扫描
-        Scanner->>StyleCache: 获取缓存的样式
-        StyleCache-->>Scanner: 样式数据
-        Scanner->>Scanner: 检测并移除水印
-    end
-
-    Note over Observer,Scanner: 精细的缓存清理策略减少不必要的样式重新计算，提升性能
-```
-
-## 15. 智能轮询时序图
-
-```mermaid
-sequenceDiagram
-    participant Script as 脚本
-    participant Timer as 定时器
-    participant DOM as DOM树
-    participant Observer as MutationObserver
-    participant Counter as 变化计数器
-
-    Script->>Script: 启动水印移除功能
-    Script->>Counter: 初始化 mutationCount = 0
-    Script->>Timer: 创建轮询定时器 (500ms间隔)
-
-    Note over Script,Timer: 轮询检测阶段 (最多20次)
-
-    loop 轮询检测
-        Timer->>Script: 触发轮询 (每500ms)
-        Script->>Script: pollCount++
-
-        alt pollCount <= 3 (初始3次)
-            Note over Script: 总是执行检测，确保初始水印被移除
-            Script->>DOM: 全量扫描
-            DOM-->>Script: 扫描结果
-            Script->>DOM: 检测并移除水印
-        else pollCount > 3 (后续轮询)
-            Script->>Counter: 检查 mutationCount
-
-            alt mutationCount > 0
-                Note over Script: 有DOM变化，执行检测
-                Script->>Counter: 重置 mutationCount = 0
-                Script->>DOM: 智能扫描
-                DOM-->>Script: 扫描结果
-                Script->>DOM: 检测并移除水印
-            else mutationCount = 0
-                Note over Script: 无DOM变化，跳过检测（性能优化）
-            end
-        end
-
-        alt pollCount > MAX_POLL_COUNT
-            Script->>Timer: 清除定时器
-            Timer-->>Script: pollTimer = null
-            Note over Script: 轮询检测完成
-        end
-    end
-
-    Note over Script,Observer: MutationObserver持续监控DOM变化
-
-    loop DOM变化监控
-        DOM->>Observer: DOM变化事件
-        Observer->>Counter: mutationCount += mutations.length
-        Note over Counter: 记录变化数量
-    end
-
-    Note over Script,Counter: 智能轮询机制：前3次确保初始检测，后续只在有变化时执行，提升性能
-```
-
-这些时序图全面展示了 Xiaomi MiMo Studio 去水印脚本的组件交互和执行流程。
+这些时序图展示了 v1.4.0 版本的Canvas专用架构，专注于水印的拦截和清理功能。
